@@ -6,93 +6,155 @@
 </template>
 
 <script setup>
-// 2. IMPORT CÁC CÔNG CỤ CẦN THIẾT
-import { ref, onMounted } from 'vue'
-import { Network } from 'vis-network'
+import { ref, onMounted, watch } from 'vue'
+import { Network } from 'vis-network/standalone'
+import 'vis-network/styles/vis-network.css'
 
-import 'vis-network/styles/vis-network.css' // Import CSS của Vis.js
+// Import icon
+import iconHost from '@/assets/icons/laptop.png'
+import iconSwitch from '@/assets/icons/switch.png'
 
-// 3. KHAI BÁO PROPS & EMITS
-// Khai báo rằng component này nhận 1 prop tên 'graphData'
 const props = defineProps(['graphData'])
-// Khai báo rằng component này có thể phát ra 1 event tên 'node-selected'
 const emit = defineEmits(['node-selected'])
-
-// 4. TẠO DOM REF
-// Tạo một biến 'ref' có tên TRÙNG VỚI tên trong template
 const networkContainer = ref(null)
+const networkInstance = ref(null)
 
-// 5. VẼ SƠ ĐỒ KHI COMPONENT ĐƯỢC TẢI
-onMounted(() => {
-  // Dữ liệu (nodes, edges) đến từ prop
-
-  // === BƯỚC 1: KIỂM TRA DỮ LIỆU ĐÃ ĐẾN NƠI CHƯA ===
-  console.log("TopologyView: Dữ liệu prop đã nhận:", props.graphData) 
-
-  // === BƯỚC 2: KIỂM TRA CONTAINER ĐÃ TỒN TẠI CHƯA ===
-  console.log("TopologyView: Container DOM element:", networkContainer.value)
+function initializeNetwork() {
+  if (!networkContainer.value || !props.graphData) {
+    console.error("TopologyView: Container hoặc graphData chưa sẵn sàng.")
+    return
+  }
 
   const data = {
     nodes: props.graphData.nodes,
     edges: props.graphData.edges
   }
-  
-  // Tùy chọn (options) cho sơ đồ (để trông giống Dark Mode)
+
   const options = {
-    nodes: {
-      shape: 'box', // Bạn có thể đổi thành 'image' sau
-      font: { color: '#ffffff' }
-    },
-    edges: {
-      color: { color: '#848484', highlight: '#ffffff' },
-      arrows: { to: { enabled: false } }
-    },
     physics: {
-      enabled: true // Bật hiệu ứng vật lý
+      enabled: true,
+      stabilization: { iterations: 200 }, // Tăng để layout đẹp hơn
+      solver: 'barnesHut',
+      barnesHut: {
+        gravitationalConstant: -12000,
+        centralGravity: 0.08,
+        springLength: 120,
+        springConstant: 0.06,
+        damping: 0.12
+      }
     },
     interaction: {
-      hover: true // Cho phép hover
+      hover: true,
+      tooltipDelay: 200,
+      navigationButtons: false,  // XÓA NÚT ĐIỀU HƯỚNG
+      keyboard: false
+    },
+    nodes: {
+      font: {
+        color: '#00F7F7',        // CHỮ MÀU CYAN ĐẸP
+        size: 13,
+        face: 'Arial',
+        strokeWidth: 3,
+        strokeColor: '#0f172a'
+      },
+      shapeProperties: { useBorderWithImage: true },
+      borderWidth: 3,
+      size: 32
+    },
+    edges: {
+      width: 2.5,
+      color: {
+        color: '#475569',
+        highlight: '#00FFFF',
+        hover: '#00F7F7'
+      },
+      arrows: { to: { enabled: false } },
+      font: {
+        color: '#00F7F7',        // CHỮ TRÊN CẠNH CŨNG CYAN
+        size: 11,
+        align: 'middle',
+        strokeWidth: 4,
+        strokeColor: '#0f172a'
+      },
+      smooth: { type: 'continuous' }
+    },
+    groups: {
+      host: {
+        shape: 'image',
+        image: iconHost,
+        color: {
+          border: '#0ea5e9',
+          background: '#0f172a',
+          highlight: { border: '#0ea5e9', background: '#1e293b' },
+          hover: { border: '#0ea5e9', background: '#1e293b' }
+        },
+        // GLOW SIÊU ĐẸP CHO HOST
+        shadow: {
+          enabled: true,
+          color: 'rgba(14, 165, 233, 0.8)', // Màu xanh cyan phát sáng
+          size: 25,
+          x: 0,
+          y: 0
+        }
+      },
+      switch: {
+        shape: 'image',
+        image: iconSwitch,
+        color: {
+          border: '#f97316',
+          background: '#0f172a',
+          highlight: { border: '#f97316', background: '#1e293b' },
+          hover: { border: '#f97316', background: '#1e293b' }
+        },
+        // GLOW SIÊU ĐẸP CHO SWITCH
+        shadow: {
+          enabled: true,
+          color: 'rgba(249, 115, 22, 0.8)', // Màu cam phát sáng
+          size: 25,
+          x: 0,
+          y: 0
+        }
+      },
+      offline: {
+        color: { border: '#7f1d1d', background: '#0f172a' },
+        shadow: { enabled: false }
+      }
     }
   }
 
-  if (networkContainer.value && props.graphData) {
-    // === BƯỚC 3: KIỂM TRA LỖI KHI KHỞI TẠO ===
-    try {
-      const network = new Network(networkContainer.value, data, options)
-      
-      // === BƯỚC 4: XÁC NHẬN THÀNH CÔNG ===
-      console.log("TopologyView: Khởi tạo Vis.js THÀNH CÔNG!")
-      
-      network.on('click', (properties) => {
-        // ... (code emit của bạn)
-      })
-    } catch (error) {
-      // Nếu có lỗi ở đây, nó sẽ bị bắt lại
-      console.error("TopologyView: LỖI KHI KHỞI TẠO VIS.JS:", error)
-    }
-  } else {
-    console.error("TopologyView: Container DOM hoặc dữ liệu graphData không tồn tại!")
-  }
+  try {
+    networkInstance.value = new Network(networkContainer.value, data, options)
 
-  // Khởi tạo sơ đồ!
-  // 'network' là một đối tượng của Vis.js
-  if (networkContainer.value) {
-    const network = new Network(networkContainer.value, data, options)
-
-    // 6. BẮT SỰ KIỆN CLICK (Dòng chảy 2 ⬆️)
-    network.on('click', (properties) => {
-      // 'properties.nodes' là một MẢNG chứa ID của các node được click
+    networkInstance.value.on('selectNode', (properties) => {
       if (properties.nodes.length > 0) {
-        const clickedNodeId = properties.nodes[0] // Lấy ID của node đầu tiên
-        // Phát event "node-selected" lên cho App.vue
-        emit('node-selected', clickedNodeId)
-      } else {
-        // Nếu click vào khoảng trắng (không click vào node nào)
-        emit('node-selected', null) // Gửi 'null' để xóa lựa chọn
+        emit('node-selected', properties.nodes[0])
       }
     })
+
+    networkInstance.value.on('deselectNode', () => {
+      emit('node-selected', null)
+    })
+
+    console.log("TopologyView: Khởi tạo Vis.js THÀNH CÔNG!")
+  } catch (error) {
+    console.error("LỖI KHI KHỞI TẠO VIS.JS:", error)
   }
+}
+
+onMounted(() => {
+  initializeNetwork()
 })
+
+watch(() => props.graphData, (newData) => {
+  if (newData && networkInstance.value) {
+    networkInstance.value.setData({
+      nodes: newData.nodes,
+      edges: newData.edges
+    })
+  } else if (newData && !networkInstance.value) {
+    initializeNetwork()
+  }
+}, { deep: true })
 </script>
 
 <style scoped>
@@ -101,23 +163,43 @@ onMounted(() => {
   padding: 1.5rem;
   background-color: #0f172a;
   color: #94a3b8;
-  /* Quan trọng: Cho phép container co giãn */
   display: flex;
   flex-direction: column;
 }
 
 h3 {
-  color: #e2e8f0;
+ color: #00F7F7;       
   margin-bottom: 1rem;
-  flex-shrink: 0; /* Không cho h3 bị co lại */
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(0, 247, 247, 0.5);
+
 }
 
-/* Quan trọng: Cho sơ đồ chiếm hết phần còn lại */
 .diagram-container {
-  flex: 1; /* Chiếm hết không gian dọc còn lại */
-  border: 1px solid #334155; /* Viền mỏng thay cho dashed */
-  border-radius: 8px;
-
+  flex: 1;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  background-color: #0f172a;
   min-height: 600px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  
+  border-bottom: 1px solid #334155;
+  padding-bottom: 1rem;
+
+  border-bottom: 3px solid #00F7F7;     /* Viền cyan phát sáng */
+  box-shadow: 0 6px 20px rgba(0, 247, 247, 0.3); /* Ánh sáng nhẹ phía dưới */
+
+  
+  
+
+}
+
+/* ẨN HOÀN TOÀN NÚT ĐIỀU HƯỚNG */
+:deep(.vis-navigation) {
+  display: none !important;
 }
 </style>
