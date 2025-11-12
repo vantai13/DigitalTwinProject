@@ -1,6 +1,7 @@
 import sys
 import os
 from flask import Flask, jsonify
+from flask_cors import CORS
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(current_dir))
@@ -13,7 +14,10 @@ except ImportError as e:
 
 app = Flask(__name__)
 
-@app.route('/network/api/status')
+# Nó nói với Flask: "Cho phép TẤT CẢ các 'origin' (địa chỉ) gọi API."
+CORS(app)
+
+@app.route('/api/network/status')
 def get_network_status():
     """
     API endpoint để lấy trạng thái hiện tại của mạng.
