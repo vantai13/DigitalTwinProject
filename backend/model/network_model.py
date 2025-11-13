@@ -109,6 +109,9 @@ class NetworkModel:
                 'from': link['node1'],
                 'to': link['node2'],
                 'label': f"{link['current_throughput']:.1f} Mbps",
+                # CÁC TRƯỜNG MỚI ĐƯỢC THÊM:
+                'utilization': link['utilization'],
+                'status': link['status'],
                 'details': link
             })
 

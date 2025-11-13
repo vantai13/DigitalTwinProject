@@ -39,8 +39,28 @@
         </template>
       </template>
 
+      <template v-else-if="selectedEdgeDetails">
+        <div v-if="selectedEdgeDetails.status === 'down'" class="status-warning">
+          <img :src="iconWarning" class="icon-warning" /> Liên kết đang NGOẠI TUYẾN!
+        </div>
+        <div v-else-if="selectedEdgeDetails.utilization > 90" class="status-warning">
+          <img :src="iconWarning" class="icon-warning" /> TẢI RẤT CAO ({{ selectedEdgeDetails.utilization }}%)
+        </div>
+         <div v-else-if="selectedEdgeDetails.utilization > 70" class="status-warning load">
+          <img :src="iconWarning" class="icon-warning" /> TẢI CAO ({{ selectedEdgeDetails.utilization }}%)
+        </div>
+
+        <p><span>Tên Link:</span> <strong>{{ selectedEdgeDetails.label }}</strong></p>
+        <p><span>Từ:</span> <strong>{{ selectedEdgeDetails.from }}</strong></p>
+        <p><span>Tới:</span> <strong>{{ selectedEdgeDetails.to }}</strong></p>
+        <p><span>Loại:</span> <strong>{{ selectedEdgeDetails.type || 'N/A' }}</strong></p>
+        <p><span>Trạng thái:</span> <strong>{{ selectedEdgeDetails.status }}</strong></p>
+        <p><span>Độ trễ (Latency):</span> <strong>{{ selectedEdgeDetails.latency || 'N/A' }}</strong></p>
+        <p><span>Tải (Utilization):</span> <strong>{{ selectedEdgeDetails.utilization }}%</strong></p>
+      </template>
+
       <template v-else>
-        <p class="placeholder-text">(Nhấn vào một node trên sơ đồ để xem chi tiết)</p>
+        <p class="placeholder-text">(Nhấn vào một node hoặc một link trên sơ đồ để xem chi tiết)</p>
       </template>
     </div>
 
@@ -49,14 +69,14 @@
 
 <script setup>
 import { computed } from 'vue'
-import iconNetwork from '@/assets/icons/database.svg'
-import iconNode from '@/assets/icons/server.svg'
 import iconWarning from '@/assets/icons/alert-triangle.svg'
 import iconSitemap from '@/assets/icons/sitemap.png'
 import iconHosting from '@/assets/icons/hosting.png'
 
-const props = defineProps(['networkData', 'selectedNodeId'])
+// MỚI: Thêm 'selectedEdgeId' vào props
+const props = defineProps(['networkData', 'selectedNodeId', 'selectedEdgeId'])
 
+// Computed cho NODE (Giữ nguyên)
 const selectedNodeDetails = computed(() => {
   if (!props.selectedNodeId || !props.networkData) {
     return null
@@ -66,27 +86,38 @@ const selectedNodeDetails = computed(() => {
   )
   return node || null
 })
+
+// Computed cho EDGE (MỚI)
+const selectedEdgeDetails = computed(() => {
+  if (!props.selectedEdgeId || !props.networkData) {
+    return null
+  }
+  // Tìm edge trong mảng data gốc
+  const edge = props.networkData.graph_data.edges.find(
+    (e) => e.id === props.selectedEdgeId
+  )
+  return edge || null
+})
 </script>
 
 <style scoped>
+/* (Toàn bộ CSS của InfoPanel.vue ở đây) */
 .info-panel {
   width: 350px;
   flex-shrink: 0;
   background-color: #1e293b;
   padding: 1.5rem;
-  color: #94a3b8; /* Màu chữ thường (label) giữ nguyên cho dễ đọc */
+  color: #94a3b8;
   border-left: 1px solid #334155;
   overflow-y: auto;
 }
-
 h3 {
-  color: #00F7F7; /* 🌟 SỬA MÀU 1 🌟 */
+  color: #00F7F7;
   margin-bottom: 1rem;
   text-transform: uppercase;
   letter-spacing: 1px;
-  text-shadow: 0 0 10px rgba(0, 247, 247, 0.7); /* Thêm shadow cho đẹp */
+  text-shadow: 0 0 10px rgba(0, 247, 247, 0.7);
 }
-
 .info-card {
   background-color: #0f172a;
   padding: 1rem;
@@ -94,34 +125,29 @@ h3 {
   margin-bottom: 1rem;
   border: 1px solid #334155;
 }
-
 .info-card h4 {
-  color: #00F7F7; /* 🌟 SỬA MÀU 2 🌟 */
+  color: #00F7F7;
   margin-bottom: 1rem;
   margin-top: 0;
   display: flex;
   align-items: center;
   border-bottom: 1px solid #334155;
   padding-bottom: 0.75rem;
-  text-shadow: 0 0 8px rgba(0, 247, 247, 0.6); /* Thêm shadow */
+  text-shadow: 0 0 8px rgba(0, 247, 247, 0.6);
 }
-
 .info-card p {
   margin: 0.6rem 0;
   font-size: 0.9rem;
   display: flex;
   justify-content: space-between;
 }
-
 .info-card p span {
-  color: #94a3b8; /* Giữ màu label xám để làm nổi bật giá trị */
+  color: #94a3b8;
 }
-
 .info-card p strong {
-  color: #00F7F7; /* 🌟 SỬA MÀU 3 🌟 */
+  color: #00F7F7;
   font-weight: 600;
 }
-
 .placeholder-text {
   margin-top: 1.5rem;
   font-style: italic;
@@ -129,10 +155,6 @@ h3 {
   font-size: 0.9rem;
   text-align: center;
 }
-
-/* Giữ nguyên màu đỏ/vàng cho CẢNH BÁO
-  vì chúng cần phải nổi bật 
-*/
 .status-warning {
   padding: 0.75rem;
   border-radius: 6px;
@@ -146,27 +168,20 @@ h3 {
   align-items: center;
   justify-content: center;
 }
-
 .status-warning.load {
   background-color: #5a4a1d;
   border: 1px solid #dca026;
   color: #fce0a5;
 }
-
-/* 🌟 SỬA MÀU ICON 🌟 */
 .icon {
   width: 50px;
   height: 50px;
   margin-right: 0.5rem;
-  /* Filter này sẽ đổi màu SVG thành #00F7F7 */
-
 }
-
 .icon-warning {
   width: 16px;
   height: 16px;
   margin-right: 0.5rem;
-  /* Giữ filter vàng cho icon warning */
   filter: invert(82%) sepia(21%) saturate(2333%) hue-rotate(345deg) brightness(99%) contrast(92%);
 }
 </style>

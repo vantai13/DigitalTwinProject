@@ -22,7 +22,7 @@ class Switch:
         self.flow_table = [] 
 
     def set_status(self, new_status):
-        if new_status in ['up', 'down', 'unknown']:
+        if new_status in ['up', 'unknown', 'offline']:
             self.status = new_status
             print(f"[{self.name}] Cập nhật trạng thái: {self.status}")
         else:

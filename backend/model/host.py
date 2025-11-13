@@ -1,4 +1,7 @@
 class Host:
+
+    HIGH_CPU_THRESHOLD = 90.0  # ngưỡng CPU cao (%)
+
     def __init__(self, name, ip_address, mac_address):
         """
             name (str): Tên của host
@@ -21,8 +24,10 @@ class Host:
         self.tx_bytes = 0  # (Tổng số bytes đã gửi)
         self.rx_bytes = 0  # (Tổng số bytes đã nhận)
 
+        
+
     def set_status(self, new_status):
-        if new_status in ['up', 'down', 'unknown']:
+        if new_status in ['up', 'unknown', 'offline', 'high-load']:
             self.status = new_status
             print(f"[{self.name}] Cập nhật trạng thái: {self.status}")
         else:
@@ -31,6 +36,19 @@ class Host:
     def update_resource_metrics(self, cpu, memory):
         self.cpu_utilization = cpu
         self.memory_usage = memory
+
+        if self.status != 'offline':
+            
+            if self.cpu_utilization >= self.HIGH_CPU_THRESHOLD:
+                # Tự động gán 'high-load'
+                # (Chỉ gán nếu trạng thái hiện tại chưa đúng)
+                if self.status != 'high-load':
+                    self.set_status('high-load')
+            else:
+                # Tự động quay về 'up' khi CPU giảm
+                if self.status != 'up':
+                    self.set_status('up')
+        
 
     def update_network_metrics(self, tx_bytes, rx_bytes):
         self.tx_bytes = tx_bytes
