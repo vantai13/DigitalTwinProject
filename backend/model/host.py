@@ -13,7 +13,7 @@ class Host:
         self.ip_address = ip_address
         self.mac_address = mac_address
         
-        # Đây là những thông tin động, sẽ được cập nhật liên tục từ Mininet.
+
         self.status = 'unknown'  # Trạng thái ban đầu
         
         # Thống kê tài nguyên (Resource metrics)
@@ -40,12 +40,9 @@ class Host:
         if self.status != 'offline':
             
             if self.cpu_utilization >= self.HIGH_CPU_THRESHOLD:
-                # Tự động gán 'high-load'
-                # (Chỉ gán nếu trạng thái hiện tại chưa đúng)
                 if self.status != 'high-load':
                     self.set_status('high-load')
             else:
-                # Tự động quay về 'up' khi CPU giảm
                 if self.status != 'up':
                     self.set_status('up')
         

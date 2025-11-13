@@ -12,6 +12,8 @@ import 'vis-network/styles/vis-network.css'
 import iconHost from '@/assets/icons/laptop.png'
 import iconSwitch from '@/assets/icons/switch.png'
 
+
+
 const props = defineProps(['graphData'])
 const emit = defineEmits(['node-selected', 'edge-selected', 'selection-cleared'])
 
@@ -46,15 +48,41 @@ function processEdges(edges) {
     }
 
     // Animation lưu lượng
-    if (edge.status === 'active' && edge.utilization > 0) {
+    if (edge.status === 'up' && edge.utilization > 0) {
+      
+      let arrowSpeed = 1; // Tốc độ mặc định
+
+      // Chỉ cần tính tốc độ
+      if (edge.utilization > highThreshold) { // Tải cao
+        arrowSpeed = 1.5; // Nhanh
+      } else if (edge.utilization > mediumThreshold) { // Tải trung bình
+        arrowSpeed = 1.2; // Vừa
+      }
+      // Tải thấp sẽ giữ nguyên màu xanh/tốc độ 1
+
+      // Cấu hình mũi tên động của bạn
       arrowsConfig = {
         to: {
           enabled: true,
-          scaleFactor: 0.7,
-          type: 'moving-arrow'
+
+          // BẮT BUỘC dùng lại 'moving-arrow' để nó di chuyển
+          type: 'moving-arrow',
+
+          // 1. Tinh chỉnh kích thước mũi tên
+          // scaleFactor: 1 là mặc định. 
+          // 1.2 là to hơn 20%. Bạn có thể thử 1.5 hoặc 2.0
+          scaleFactor: 1.2,
+
+          // 2. Tinh chỉnh tốc độ/tần suất
+          // 'length' vẫn hoạt động với 'moving-arrow'
+          // Số càng NHỎ, mũi tên càng GẦN NHAU và chạy càng NHANH.
+          length: 40 / arrowSpeed
         }
       }
     }
+
+
+
 
     // Glow cho link up
     if (edge.status !== 'down') {
@@ -77,7 +105,9 @@ function processEdges(edges) {
       width: 2.5,
       arrows: arrowsConfig,
       dashes: isDashed,
-      smooth: { type: 'continuous' },
+      smooth: {
+        type: 'continuous'
+      },
       shadow: shadowConfig
     }
   })
@@ -168,7 +198,10 @@ function initializeNetwork() {
         size: 11,
         align: 'middle',
         strokeWidth: 4,
-        strokeColor: '#0f172a'
+        strokeColor: '#0f172a',
+      },
+      arrows: {
+    to: { enabled: true }
       }
     },
     groups: {
@@ -189,7 +222,6 @@ function initializeNetwork() {
           y: 0
         }
       },
-      // MỚI: Host offline - viền nét đứt + icon mờ
       'host-offline': {
         shape: 'image',
         image: iconHost,
@@ -200,8 +232,8 @@ function initializeNetwork() {
           hover: { border: '#94a3b8', background: '#1e293b' }
         },
         borderWidth: 3,
-        borderDashes: [8, 8], // Nét đứt: 8px đoạn, 8px trống
-        opacity: 0.6, // Mờ đi cho dễ nhận biết offline
+        borderDashes: [8, 8],
+        opacity: 0.6, 
         shadow: { enabled: false }
       },
       'host-high-load': {
@@ -238,7 +270,6 @@ function initializeNetwork() {
           y: 0
         }
       },
-      // MỚI: Switch offline - viền nét đứt
       'switch-offline': {
         shape: 'image',
         image: iconSwitch,

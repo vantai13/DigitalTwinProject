@@ -4,63 +4,62 @@
 
     <div class="info-card" v-if="networkData">
       <h4>
-        <img :src="iconSitemap" class="icon" /> Tổng quan Mạng
+        <img :src="iconSitemap" class="icon" /> Network OverView
       </h4>
-      <p><span>Tổng số Hosts:</span> <strong>{{ networkData.total_hosts }}</strong></p>
-      <p><span>Tổng số Switches:</span> <strong>{{ networkData.total_switches }}</strong></p>
+      <p><span>Total Hosts:</span> <strong>{{ networkData.total_hosts }}</strong></p>
+      <p><span>Total Switches:</span> <strong>{{ networkData.total_switches }}</strong></p>
     </div>
 
     <div class="info-card">
       <h4>
-        <img :src="iconHosting" class="icon" /> Chi tiết đối tượng chọn
+        <img :src="iconHosting" class="icon" /> Selected Object Details
       </h4>
       
       <template v-if="selectedNodeDetails">
         <div v-if="selectedNodeDetails.details.status === 'offline'" class="status-warning">
-          <img :src="iconWarning" class="icon-warning" /> Thiết bị đang NGOẠI TUYẾN!
+          <img :src="iconWarning" class="icon-warning" /> Device is OFFLINE!
         </div>
         <div v-if="selectedNodeDetails.details.status === 'high-load'" class="status-warning load">
-          <img :src="iconWarning" class="icon-warning" /> Thiết bị đang TẢI CAO!
+          <img :src="iconWarning" class="icon-warning" /> HIGH LOAD!
         </div>
 
-        <p><span>Tên:</span> <strong>{{ selectedNodeDetails.details.name }}</strong></p>
-        <p><span>Loại:</span> <strong>{{ selectedNodeDetails.group }}</strong></p>
-
+        <p><span>Name:</span> <strong>{{ selectedNodeDetails.details.name }}</strong></p>
+        <p><span>Type:</span> <strong>{{ selectedNodeDetails.group }}</strong></p>
         <template v-if="selectedNodeDetails.group === 'host'">
           <p><span>IP:</span> <strong>{{ selectedNodeDetails.details.ip_address }}</strong></p>
-          <p><span>Trạng thái:</span> <strong>{{ selectedNodeDetails.details.status }}</strong></p>
+          <p><span>Status:</span> <strong>{{ selectedNodeDetails.details.status }}</strong></p>
           <p><span>CPU:</span> <strong>{{ selectedNodeDetails.details.cpu_utilization }}%</strong></p>
           <p><span>Memory:</span> <strong>{{ selectedNodeDetails.details.memory_usage }}%</strong></p>
         </template>
 
         <template v-if="selectedNodeDetails.group === 'switch'">
           <p><span>DPID:</span> <strong>{{ selectedNodeDetails.details.dpid }}</strong></p>
-          <p><span>Trạng thái:</span> <strong>{{ selectedNodeDetails.details.status }}</strong></p>
+          <p><span>Status:</span> <strong>{{ selectedNodeDetails.details.status }}</strong></p>
         </template>
       </template>
 
       <template v-else-if="selectedEdgeDetails">
         <div v-if="selectedEdgeDetails.status === 'down'" class="status-warning">
-          <img :src="iconWarning" class="icon-warning" /> Liên kết đang NGOẠI TUYẾN!
+          <img :src="iconWarning" class="icon-warning" /> Device is OFFLINE!
         </div>
         <div v-else-if="selectedEdgeDetails.utilization > 90" class="status-warning">
-          <img :src="iconWarning" class="icon-warning" /> TẢI RẤT CAO ({{ selectedEdgeDetails.utilization }}%)
+          <img :src="iconWarning" class="icon-warning" /> CRITICAL LOAD ({{ selectedEdgeDetails.utilization }}%)
         </div>
          <div v-else-if="selectedEdgeDetails.utilization > 70" class="status-warning load">
-          <img :src="iconWarning" class="icon-warning" /> TẢI CAO ({{ selectedEdgeDetails.utilization }}%)
+          <img :src="iconWarning" class="icon-warning" /> HIGH LOAD ({{ selectedEdgeDetails.utilization }}%)
         </div>
 
-        <p><span>Tên Link:</span> <strong>{{ selectedEdgeDetails.label }}</strong></p>
-        <p><span>Từ:</span> <strong>{{ selectedEdgeDetails.from }}</strong></p>
-        <p><span>Tới:</span> <strong>{{ selectedEdgeDetails.to }}</strong></p>
-        <p><span>Loại:</span> <strong>{{ selectedEdgeDetails.type || 'N/A' }}</strong></p>
-        <p><span>Trạng thái:</span> <strong>{{ selectedEdgeDetails.status }}</strong></p>
-        <p><span>Độ trễ (Latency):</span> <strong>{{ selectedEdgeDetails.latency || 'N/A' }}</strong></p>
-        <p><span>Tải (Utilization):</span> <strong>{{ selectedEdgeDetails.utilization }}%</strong></p>
+        <p><span>Link Name:</span> <strong>{{ selectedEdgeDetails.label }}</strong></p>
+        <p><span>From:</span> <strong>{{ selectedEdgeDetails.from }}</strong></p>
+        <p><span>To:</span> <strong>{{ selectedEdgeDetails.to }}</strong></p>
+        <p><span>Type:</span> <strong>{{ selectedEdgeDetails.type || 'N/A' }}</strong></p>
+        <p><span>Status:</span> <strong>{{ selectedEdgeDetails.status }}</strong></p>
+        <p><span>Latency:</span> <strong>{{ selectedEdgeDetails.latency || 'N/A' }}</strong></p>
+        <p><span>Utilization:</span> <strong>{{ selectedEdgeDetails.utilization }}%</strong></p>
       </template>
 
       <template v-else>
-        <p class="placeholder-text">(Nhấn vào một node hoặc một link trên sơ đồ để xem chi tiết)</p>
+        <p class="placeholder-text">(Click on a node or link in the diagram to view details)</p>
       </template>
     </div>
 
@@ -73,10 +72,10 @@ import iconWarning from '@/assets/icons/alert-triangle.svg'
 import iconSitemap from '@/assets/icons/sitemap.png'
 import iconHosting from '@/assets/icons/hosting.png'
 
-// MỚI: Thêm 'selectedEdgeId' vào props
+
 const props = defineProps(['networkData', 'selectedNodeId', 'selectedEdgeId'])
 
-// Computed cho NODE (Giữ nguyên)
+
 const selectedNodeDetails = computed(() => {
   if (!props.selectedNodeId || !props.networkData) {
     return null
@@ -87,7 +86,7 @@ const selectedNodeDetails = computed(() => {
   return node || null
 })
 
-// Computed cho EDGE (MỚI)
+// Computed cho EDGE 
 const selectedEdgeDetails = computed(() => {
   if (!props.selectedEdgeId || !props.networkData) {
     return null

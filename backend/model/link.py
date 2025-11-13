@@ -14,7 +14,7 @@ class Link:
         self.node2 = node2
         self.bandwidth_capacity = bandwidth_capacity  # (Mbps)
         
-        self.status = 'unknown'  # Trạng thái: 'up', 'down'
+        self.status = 'unknown'  
         
         # Đây là các số liệu hiệu năng (performance metrics)
         # mà chúng ta muốn đồng bộ hóa từ Mininet ( dùng iPerf).

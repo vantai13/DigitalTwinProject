@@ -20,7 +20,6 @@ class NetworkModel:
         
         print(f"Khởi tạo NetworkModel: {self.name}")
 
-    # --- Các phương thức Thêm (Add) ---
     
     def add_host(self, name, ip_address, mac_address):
         if name in self.hosts:
@@ -109,13 +108,11 @@ class NetworkModel:
                 'from': link['node1'],
                 'to': link['node2'],
                 'label': f"{link['current_throughput']:.1f} Mbps",
-                # CÁC TRƯỜNG MỚI ĐƯỢC THÊM:
                 'utilization': link['utilization'],
                 'status': link['status'],
                 'details': link
             })
 
-        # 3. Gói tất cả lại
         snapshot = {
             'model_name': self.name,
             'timestamp': datetime.now().isoformat(),

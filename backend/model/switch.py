@@ -4,7 +4,6 @@ class Switch:
             name (str): Tên của switch
             dpid (str): Datapath ID. Đây là một định danh duy nhất
                         của Open vSwitch, rất quan trọng để điều khiển.
-                        
         """
 
         self.name = name

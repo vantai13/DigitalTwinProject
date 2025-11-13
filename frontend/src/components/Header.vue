@@ -1,6 +1,5 @@
 <template>
   <header class="app-header">
-    <!-- Icon SVG + Tiêu đề -->
     <div class="header-title">
       <img :src="iconHeader" class="header-icon" alt="Network Icon" />
       <span title="Digital Twin Network Dashboard">Digital Twin Network Dashboard</span>
@@ -8,7 +7,7 @@
 
     <!-- Thời gian cập nhật -->
     <div class="time-stats">
-      <span>Cập nhật lần cuối:</span>
+      <span>Latest Update:</span>
       <span class="time-value">{{ updateCount }}</span>
       <span class="time-value active">{{ lastUpdateTime }}</span>
     </div>
@@ -20,17 +19,14 @@ import { ref, onMounted } from 'vue'
 import iconHeader from '@/assets/icons/internet.png'
 
 // State thời gian
-const lastUpdateTime = ref('16:35:12')
-const updateCount = ref('#035:12')
+const lastUpdateTime = ref('00:00:00')
+const updateCount = ref('00:00:00')
 
 // Cập nhật đồng hồ thực tế
 onMounted(() => {
   setInterval(() => {
     const now = new Date()
     lastUpdateTime.value = now.toLocaleTimeString('vi-VN', { hour12: false })
-    // Có thể tăng updateCount nếu cần
-    // const num = parseInt(updateCount.value.split(':')[0].replace('#', '')) || 35
-    // updateCount.value = `#${String(num + 1).padStart(3, '0')}:12`
   }, 1000)
 })
 </script>
@@ -43,7 +39,6 @@ onMounted(() => {
   padding: 0 1.5rem;
   height: 60px;
   background-color: #0f172a;
-  /* XÓA DÒNG color: #e2e8f0; ở đây để không ghi đè */
   font-family: 'Arial', sans-serif;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   border-bottom: 1px solid #334155;
@@ -54,13 +49,12 @@ onMounted(() => {
   align-items: center;
 }
 
-/* CHỮ TIÊU ĐỀ MÀU CYAN ĐẸP NHƯ HÌNH */
 .header-title span {
   color: #00F7F7 !important; 
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: 0.8px;
-  text-shadow: 0 0 8px rgba(34, 211, 238, 0.4); /* Hiệu ứng phát sáng nhẹ, cực pro */
+  text-shadow: 0 0 8px rgba(34, 211, 238, 0.4); /* Hiệu ứng phát sáng nhẹ */
 }
 
 /* Cập nhật lại màu chữ cho phần thời gian */
@@ -69,7 +63,7 @@ onMounted(() => {
   align-items: center;
   font-size: 0.95rem;
   font-weight: 500;
-  color: #ffffff; /* Màu xám nhạt cho chữ "Cập nhật lần cuối:" */
+  color: #ffffff; 
 }
 
 .time-stats span {
@@ -94,11 +88,11 @@ onMounted(() => {
 
 /* Hover effect */
 .time-value:hover {
-  background-color: #475569;
+  background-color: #ffffff;
 }
 
 .time-value.active:hover {
-  background-color: #16a34a;
+  background-color: #ffffff;
 }
 
 .header-icon {
