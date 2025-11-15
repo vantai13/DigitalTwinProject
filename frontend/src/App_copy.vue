@@ -2,24 +2,29 @@
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
 
+// Import các "viên gạch"
 import Header from './components/Header.vue'
 import TopologyView from './components/TopologyView.vue'
 import InfoPanel from './components/InfoPanel.vue'
 
-
+// === STATE CHÍNH ===
 const networkData = ref(null)
 const isLoading = ref(true)
 const errorMessage = ref(null)
 
+// State để theo dõi đối tượng đang được chọn
 const selectedNodeId = ref(null)
-const selectedEdgeId = ref(null) 
+const selectedEdgeId = ref(null) // <-- STATE MỚI
 
-
+// === GỌI API ===
 async function fetchData() {
   try {
+    // Lưu ý: Đảm bảo API này trả về dữ liệu 'edges'
+    // với các trường 'id', 'utilization', 'status', v.v.
     const response = await axios.get('http://localhost:5000/api/network/status')
+    
     networkData.value = response.data
-
+    console.log("Dữ liệu đã tải thành công:", response.data)
   } catch (error) {
     console.error("Lỗi khi gọi API:", error)
     errorMessage.value = "Không thể kết nối đến Backend (Flask)."
@@ -29,20 +34,18 @@ async function fetchData() {
 }
 
 onMounted(() => {
-
   fetchData()
   
-  // Tự động làm mới dữ liệu mỗi 2 giây (polling)
-  setInterval(fetchData, 2000); 
-
+  // (Tùy chọn) Cập nhật dữ liệu mỗi 5 giây
+  // setInterval(fetchData, 5000);
 })
 
-
+// === HÀM XỬ LÝ SỰ KIỆN ===
 
 // Khi một NODE được chọn
 function handleNodeSelected(nodeId) {
   selectedNodeId.value = nodeId
-  selectedEdgeId.value = null 
+  selectedEdgeId.value = null // Bỏ chọn edge
   console.log("Node được chọn:", selectedNodeId.value)
 }
 
@@ -91,7 +94,7 @@ function handleSelectionCleared() {
 </template>
 
 <style>
-
+/* (Toàn bộ CSS global của bạn ở đây) */
 body, html {
   margin: 0;
   padding: 0;
