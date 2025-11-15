@@ -1,6 +1,8 @@
 import time
 import requests
 import re
+import os
+import json
 from mininet.net import Mininet
 from mininet.topo import Topo
 from mininet.cli import CLI
@@ -61,26 +63,76 @@ def push_link_data_to_api(link_id, throughput_mbps):
     except requests.exceptions.RequestException as e:
         print(f"[Lỗi API] Không thể đẩy dữ liệu cho {link_id}: {e}")
 
-# --- ĐỊNH NGHĨA TOPOLOGY ---
-class MySimpleTopo(Topo):
+# # --- ĐỊNH NGHĨA TOPOLOGY ---
+# class MySimpleTopo(Topo):
+#     def build(self):
+        
+#         h1 = self.addHost('h1', ip='10.0.0.1/24')
+#         h2 = self.addHost('h2', ip='10.0.0.2/24')
+        
+        
+#         s1 = self.addSwitch('s1')
+        
+        
+#         self.addLink(h1, s1, bw=100)
+#         self.addLink(h2, s1, bw=100)
+
+
+# --- 2. ĐỊNH NGHĨA TOPOLOGY TỪ FILE CẤU HÌNH ---
+class ConfigTopo(Topo):
+    """
+    Một topo động, tự xây dựng dựa trên file topology.json.
+    """
     def build(self):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
         
-        h1 = self.addHost('h1', ip='10.0.0.1/24')
-        h2 = self.addHost('h2', ip='10.0.0.2/24')
+        # 2. Xây dựng đường dẫn TUYỆT ĐỐI đến file topology.json
+        # (Đi lên 1 cấp '..' từ 'mininet_twin' để đến thư mục gốc dự án)
+        config_path = os.path.join(current_dir, '..', 'topology.json')
+        config_path = os.path.abspath(config_path) # Đảm bảo đường dẫn là tuyệt đối
+        # --- KẾT THÚC SỬA LỖI --
         
-        
-        s1 = self.addSwitch('s1')
-        
-        
-        self.addLink(h1, s1, bw=100)
-        self.addLink(h2, s1, bw=100)
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+        except Exception as e:
+            print(f"[LỖI] Không thể đọc file topology.json: {e}")
+            return
+
+        # Dùng dictionary để lưu các node đã tạo, để sau này tìm lại khi tạo link
+        host_nodes = {}
+        switch_nodes = {}
+
+        # Thêm hosts
+        for host in config.get('hosts', []):
+            h = self.addHost(host['name'], ip=host['ip'], mac=host.get('mac'))
+            host_nodes[host['name']] = h
+            
+        # Thêm switches
+        for switch in config.get('switches', []):
+            s = self.addSwitch(switch['name'], dpid=switch.get('dpid'))
+            switch_nodes[switch['name']] = s
+            
+        # Thêm links
+        for link in config.get('links', []):
+            node1_name = link['from']
+            node2_name = link['to']
+            
+            # Tìm đối tượng node (Host hoặc Switch) từ tên của nó
+            node1 = host_nodes.get(node1_name) or switch_nodes.get(node1_name)
+            node2 = host_nodes.get(node2_name) or switch_nodes.get(node2_name)
+            
+            if node1 and node2:
+                self.addLink(node1, node2, bw=link.get('bw', 100))
+            else:
+                print(f"[Lỗi Topo] Không thể tạo link. Node '{node1_name}' hoặc '{node2_name}' không tồn tại.")
 
 # --- HÀM CHÍNH ĐỂ CHẠY ---
 def run_simulation():
     setLogLevel('info')
     
     # Khởi tạo mạng
-    topo = MySimpleTopo()
+    topo = ConfigTopo()
     net = Mininet(topo=topo)
     net.start()
 
@@ -121,6 +173,7 @@ def run_simulation():
         # VÒNG LẶP ĐỒNG BỘ HÓA (THE SYNC LOOP)
         # ---------------------------------------------
         while True:
+            
             # Lặp qua tất cả các host trong mạng
             for host in net.hosts:
                 # 1. THU THẬP (Collect)
@@ -163,8 +216,12 @@ def run_simulation():
                 prev_rx, prev_tx = link_byte_counters.get(link_id, (0, 0))
                 print(f"[DEBUG]   prev_tx = {prev_tx} bytes")
                 
-                # Tính delta (tổng RX + TX)
-                delta_bytes = (current_rx - prev_rx) + (current_tx - prev_tx)
+                # Tính delta 
+                # gửi đi 
+                delta_bytes = (current_tx - prev_tx) + (current_rx - prev_rx)
+ 
+                
+
                 if delta_bytes < 0:
                     delta_bytes = 0  # Tránh âm do reset counter
                 print(f"[DEBUG]   delta_bytes = {delta_bytes} bytes")
@@ -183,8 +240,9 @@ def run_simulation():
 
                 # --------------------------------------------
                 
-                # 3. NGHỈ (Sleep)
+            # 3. NGHỈ (Sleep)
             time.sleep(SYNC_INTERVAL)
+        
             
     except KeyboardInterrupt:
         print("\n>>> Đã nhận lệnh dừng (Ctrl+C). Đang dọn dẹp...")

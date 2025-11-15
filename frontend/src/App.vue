@@ -19,6 +19,7 @@ async function fetchData() {
   try {
     const response = await axios.get('http://localhost:5000/api/network/status')
     networkData.value = response.data
+    errorMessage.value = null
 
   } catch (error) {
     console.error("Lỗi khi gọi API:", error)

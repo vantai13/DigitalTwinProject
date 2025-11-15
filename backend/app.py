@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -25,11 +26,44 @@ except ImportError as e:
 app = Flask(__name__)
 CORS(app) # Cho phép Frontend gọi API
 
-app.logger.info(">>> Khởi tạo 'Bộ não' Digital Twin...")
-
 # TẠO MỘT ĐỐI TƯỢNG DIGITAL TWIN DUY NHẤT (TOÀN CỤC)
 digital_twin = NetworkModel("Main Digital Twin")
 
+# ĐẶT LẠI current_dir TRƯỚC KHI DÙNG
+current_dir = os.path.dirname(os.path.abspath(__file__))
+config_path = os.path.join(current_dir, '..', 'topology.json')
+
+# Sau đó mới đọc file
+if os.path.exists(config_path):
+    with open(config_path, 'r') as f:
+        topology_config = json.load(f)
+else:
+    print(f"[LỖI] Không tìm thấy file: {config_path}")
+    # Dừng hoặc dùng topology mặc định
+try:
+    with open(config_path) as f:
+        topo_config = json.load(f)
+
+    # Đọc và thêm hosts
+    for host in topo_config.get('hosts', []):
+        digital_twin.add_host(host['name'], host['ip'], host.get('mac'))
+
+    # Đọc và thêm switches
+    for switch in topo_config.get('switches', []):
+        digital_twin.add_switch(switch['name'], switch.get('dpid'))
+
+    # Đọc và thêm links
+    for link in topo_config.get('links', []):
+        digital_twin.add_link(link['from'], link['to'], link.get('bw', 100))
+        
+    print(">>> 'Bộ não' Digital Twin đã sẵn sàng (đã load từ JSON).")
+
+except FileNotFoundError:
+    print(f"[LỖI NGHIÊM TRỌNG] Không tìm thấy file topology.json tại '{config_path}'")
+    sys.exit(1)
+except Exception as e:
+    print(f"[LỖI] Không thể load topo từ JSON: {e}")
+    sys.exit(1)
 
 @app.route('/api/update/host/<hostname>', methods=['POST'])
 def update_host_data(hostname):
@@ -73,7 +107,7 @@ def update_link_data(link_id):
     
     if link_obj:
         throughput = data.get('throughput', 0.0)
-        latency = data.get('latency', 0.0) 
+        latency = data.get('latency', 0.0) # (Hiện đang là 0.0)
         link_obj.update_performance_metrics(throughput, latency)
         
         # print(f"[API Update] Cập nhật Link {link_id}: Throughput={throughput} Mbps")
@@ -81,13 +115,13 @@ def update_link_data(link_id):
     else:
         return jsonify({"status": "error", "message": "Link not found"}), 404
 
-# (của file run_simulation.py)
-print(">>> Đang 'mồi' (seed) topo mạng ban đầu...")
-digital_twin.add_host('h1', '10.0.0.1', '00:00:00:00:00:01')
-digital_twin.add_host('h2', '10.0.0.2', '00:00:00:00:00:02')
-digital_twin.add_switch('s1', '00:00:00:00:01:01')
-digital_twin.add_link('h1', 's1', bandwidth_capacity=100) 
-digital_twin.add_link('h2', 's1', bandwidth_capacity=100) 
+# # (của file run_simulation.py)
+# print(">>> Đang 'mồi' (seed) topo mạng ban đầu...")
+# digital_twin.add_host('h1', '10.0.0.1', '00:00:00:00:00:01')
+# digital_twin.add_host('h2', '10.0.0.2', '00:00:00:00:00:02')
+# digital_twin.add_switch('s1', '00:00:00:00:01:01')
+# digital_twin.add_link('h1', 's1', bandwidth_capacity=100) 
+# digital_twin.add_link('h2', 's1', bandwidth_capacity=100) 
 
 print(">>> 'Bộ não' Digital Twin đã sẵn sàng.")
 
