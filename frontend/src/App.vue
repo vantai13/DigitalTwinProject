@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
+import { io } from 'socket.io-client'
 
 import Header from './components/Header.vue'
 import TopologyView from './components/TopologyView.vue'
@@ -18,7 +19,7 @@ const connectionStatus = ref('connecting') // 'connecting', 'connected', 'error'
 const retryCount = ref(0)
 const maxRetries = 3
 
-let pollingInterval = null
+const socket = ref(null)
 
 // ============================================
 // API FUNCTIONS
@@ -113,10 +114,11 @@ function handleSelectionCleared() {
 // ============================================
 // LIFECYCLE
 // ============================================
+// frontend/src/App.vue
+
 onMounted(async () => {
   console.log('Frontend đang khởi động...')
   
-  // Kiểm tra Backend trước
   const isHealthy = await checkBackendHealth()
   
   if (!isHealthy) {
@@ -126,20 +128,91 @@ onMounted(async () => {
     return
   }
   
-  // Fetch dữ liệu lần đầu
-  await fetchData()
+  const socket = io('http://localhost:5000')
+
+  // 1. Nhận trạng thái ban đầu
+  socket.on('initial_state', (data) => {
+    console.log("Nhận trạng thái ban đầu!")
+    networkData.value = data
+    isLoading.value = false
+    connectionStatus.value = 'connected' // <-- ĐÃ SỬA LỖI 1
+  })
+
+  // 2. Lắng nghe tin 'host_updated'
+  socket.on('host_updated', (updatedHost) => {
+    if (!networkData.value) return;
+    console.log("Host updated:", updatedHost.name)
+
+    const index = networkData.value.graph_data.nodes.findIndex(
+      n => n.id === updatedHost.name && n.group === 'host'
+    )
+    if (index !== -1) {
+      const oldNode = networkData.value.graph_data.nodes[index];
+      networkData.value.graph_data.nodes[index] = {
+         ...oldNode,
+         details: updatedHost 
+      };
+    }
+  })
+
+  // 3. Lắng nghe tin 'switch_updated' (TƯƠNG TỰ HOST)
+  socket.on('switch_updated', (updatedSwitch) => {
+    if (!networkData.value) return;
+    console.log("Switch updated:", updatedSwitch.name)
+
+    const index = networkData.value.graph_data.nodes.findIndex(
+      n => n.id === updatedSwitch.name && n.group === 'switch'
+    )
+    if (index !== -1) {
+      const oldNode = networkData.value.graph_data.nodes[index];
+      networkData.value.graph_data.nodes[index] = {
+         ...oldNode,
+         details: updatedSwitch 
+      };
+    }
+  })
+
+
+  // 4. Lắng nghe tin 'link_updated' (TƯƠNG TỰ LINK/EDGE)
+  socket.on('link_updated', (updatedLink) => {
+    if (!networkData.value) return;
+    console.log("Link updated:", updatedLink.id)
+    
+    const index = networkData.value.graph_data.edges.findIndex(
+      e => e.id === updatedLink.id
+    )
+    if (index !== -1) {
+      const oldEdge = networkData.value.graph_data.edges[index];
+      networkData.value.graph_data.edges[index] = {
+         ...oldEdge,
+         label: `${updatedLink.current_throughput.toFixed(1)} Mbps`,
+         utilization: updatedLink.utilization,
+         status: updatedLink.status,
+         details: updatedLink 
+      };
+    }
+  })
   
-  // Bắt đầu polling (mỗi 2s)
-  pollingInterval = setInterval(fetchData, 2000)
-  console.log('✅ Polling đã bắt đầu (mỗi 2s)')
+  // 5. Xử lý mất kết nối
+  socket.on('disconnect', () => {
+    console.warn("Mất kết nối WebSocket!")
+    connectionStatus.value = 'error'
+    errorMessage.value = "🔌 Mất kết nối tới máy chủ real-time."
+  })
+  
+  // 6. Xử lý kết nối lại
+  socket.on('connect', () => {
+    // Khi kết nối lại, server sẽ tự động gửi lại 'initial_state'
+    // nên chúng ta chỉ cần reset trạng thái
+    console.log("Kết nối lại WebSocket thành công!")
+    connectionStatus.value = 'connecting' // Chờ 'initial_state' mới
+    isLoading.value = true
+  })
+
 })
 
 onUnmounted(() => {
-  // Dọn dẹp khi component bị destroy
-  if (pollingInterval) {
-    clearInterval(pollingInterval)
-    console.log('🧹 Đã dừng polling')
-  }
+  socket.disconnect()
 })
 </script>
 

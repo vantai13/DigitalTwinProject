@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "axios": "^1.13.2",
+    "socket.io-client": "^4.8.1",
     "vis-data": "^8.0.3",
     "vis-network": "^10.0.2",
     "vue": "^3.5.22"
