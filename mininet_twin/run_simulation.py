@@ -14,7 +14,6 @@ import collector
 
 # --- CẤU HÌNH ---
 # Địa chỉ server Flask (Backend)
-# Chúng ta sẽ tạo các API này ở Bước 3
 API_BASE_URL = "http://localhost:5000/api" 
 
 # Thời gian nghỉ giữa các lần đồng bộ (tính bằng giây)
@@ -63,20 +62,75 @@ def push_link_data_to_api(link_id, throughput_mbps):
     except requests.exceptions.RequestException as e:
         print(f"[Lỗi API] Không thể đẩy dữ liệu cho {link_id}: {e}")
 
-# # --- ĐỊNH NGHĨA TOPOLOGY ---
-# class MySimpleTopo(Topo):
-#     def build(self):
-        
-#         h1 = self.addHost('h1', ip='10.0.0.1/24')
-#         h2 = self.addHost('h2', ip='10.0.0.2/24')
-        
-        
-#         s1 = self.addSwitch('s1')
-        
-        
-#         self.addLink(h1, s1, bw=100)
-#         self.addLink(h2, s1, bw=100)
+def push_topology_to_backend(net):
+    """
+    Gửi toàn bộ topology (hosts, switches, links) từ đối tượng 'net'
+    lên Backend để Backend tự động 'mồi' (seed).
+    """
+    print(">>> Đang thu thập topology từ Mininet để gửi lên Backend...")
 
+    topology_data = {
+        "hosts": [],
+        "switches": [],
+        "links": []
+    }
+
+    # 1. Thu thập thông tin tất cả Hosts
+    for host in net.hosts:
+        topology_data["hosts"].append({
+            "name": host.name,
+            "ip": host.IP(),  # Lấy IP thật từ Mininet
+            "mac": host.MAC()  # Lấy MAC thật từ Mininet
+        })
+
+    # 2. Thu thập thông tin tất cả Switches
+    for switch in net.switches:
+        topology_data["switches"].append({
+            "name": switch.name,
+            "dpid": switch.dpid
+        })
+
+    # 3. Thu thập thông tin tất cả Links
+    processed_links = set()  # Tránh trùng lặp (h1-s1 và s1-h1)
+
+    for link in net.links:
+        node1_name = link.intf1.node.name
+        node2_name = link.intf2.node.name
+
+        # Chuẩn hóa link_id (sắp xếp theo alphabet)
+        link_id = "-".join(sorted([node1_name, node2_name]))
+
+        if link_id in processed_links:
+            continue
+        processed_links.add(link_id)
+
+        # Lấy băng thông (bandwidth) nếu có
+        bw = 100  # Mặc định
+        if 'bw' in link.intf1.params:
+            bw = link.intf1.params['bw']
+        elif 'bw' in link.intf2.params:
+            bw = link.intf2.params['bw']
+
+        topology_data["links"].append({
+            "node1": node1_name,
+            "node2": node2_name,
+            "bandwidth": bw
+        })
+
+    # Gửi POST request
+    try:
+        url = f"{API_BASE_URL}/init/topology"
+        response = requests.post(url, json=topology_data, timeout=3.0)
+        response.raise_for_status() # Báo lỗi nếu API trả về 4xx/5xx
+        print(f">>> Gửi topology thành công! ({len(topology_data['hosts'])} hosts, {len(topology_data['switches'])} switches, {len(topology_data['links'])} links)")
+        return True
+    except requests.exceptions.ConnectionError:
+        print(f"[LỖI NGHIÊM TRỌNG] Không thể kết nối đến Backend tại {url}.")
+        print(">>> Hãy đảm bảo Backend Flask đang chạy!")
+        return False
+    except Exception as e:
+        print(f"[LỖI] Không thể gửi topology: {e}")
+        return False
 
 # --- 2. ĐỊNH NGHĨA TOPOLOGY TỪ FILE CẤU HÌNH ---
 class ConfigTopo(Topo):
@@ -136,6 +190,12 @@ def run_simulation():
     net = Mininet(topo=topo)
     net.start()
 
+    # Gửi topology vừa xây dựng lên Backend
+    if not push_topology_to_backend(net):
+        print("[DỪNG] Không thể 'mồi' topology cho Backend. Dừng mô phỏng.")
+        net.stop()
+        return
+
     # Lấy các đối tượng host và link
     h1 = net.get('h1')
     h2 = net.get('h2')
@@ -184,7 +244,6 @@ def run_simulation():
                 push_host_data_to_api(host.name, cpu, mem)
 
             for link in net.links:
-            # Bỏ qua link chưa sẵn sàng
                 if not link.intf1 or not link.intf2:
                     continue
                 
@@ -193,55 +252,33 @@ def run_simulation():
                 node1 = intf1.node
                 node2 = intf2.node
                 
-                # Chuẩn hóa link_id (alphabet order)
                 link_id = "-".join(sorted([node1.name, node2.name]))
                 
-                # Chỉ xử lý nếu một trong hai node là Host
-                host_node = None
-                host_intf = None
-                if isinstance(node1, Host):
-                    host_node = node1
-                    host_intf = intf1
-                elif isinstance(node2, Host):
-                    host_node = node2
-                    host_intf = intf2
-                else:
-                    continue  # Bỏ qua link switch-switch (nếu có)
+                # Đo cả 2 phía
+                rx1, tx1 = collector.get_interface_bytes(node1, intf1.name)
+                rx2, tx2 = collector.get_interface_bytes(node2, intf2.name)
                 
-                # Lấy bytes hiện tại
-                current_rx, current_tx = collector.get_interface_bytes(host_node, host_intf.name)
-                print(f"[DEBUG]   current_tx = {current_tx} bytes")
+                # Lấy giá trị cũ
+                prev_tx1, prev_tx2 = link_byte_counters.get(link_id, (0, 0))
                 
-                # Lấy bytes cũ
-                prev_rx, prev_tx = link_byte_counters.get(link_id, (0, 0))
-                print(f"[DEBUG]   prev_tx = {prev_tx} bytes")
+                # TX của node1 = RX của node2 (và ngược lại)
+                # Chọn MAX để tránh mất dữ liệu
+                delta_1to2 = tx1 - prev_tx1  # node1 → node2
+                delta_2to1 = tx2 - prev_tx2  # node2 → node1
                 
-                # Tính delta 
-                # gửi đi 
-                delta_bytes = (current_tx - prev_tx) + (current_rx - prev_rx)
- 
+                # Tổng lưu lượng
+                total_delta = delta_1to2 + delta_2to1
                 
-
-                if delta_bytes < 0:
-                    delta_bytes = 0  # Tránh âm do reset counter
-                print(f"[DEBUG]   delta_bytes = {delta_bytes} bytes")
+                if total_delta < 0:
+                    total_delta = 0
                 
-                # Tính throughput
-                throughput_bps = delta_bytes / SYNC_INTERVAL
+                throughput_bps = total_delta / SYNC_INTERVAL
                 throughput_mbps = round((throughput_bps * 8) / 1_000_000, 2)
                 
-                print(f"[{link_id}] Throughput: {throughput_mbps} Mbps")
-                
-                # Gửi API
+                print(f"[{link_id}] Bidirectional Throughput: {throughput_mbps} Mbps")
                 push_link_data_to_api(link_id, throughput_mbps)
                 
-                # Cập nhật bộ nhớ
-                link_byte_counters[link_id] = (current_rx, current_tx)
-
-                # --------------------------------------------
-                
-            # 3. NGHỈ (Sleep)
-            time.sleep(SYNC_INTERVAL)
+                link_byte_counters[link_id] = (tx1, tx2)
         
             
     except KeyboardInterrupt:

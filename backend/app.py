@@ -20,68 +20,88 @@ CORS(app)
 # TẠO ĐỐI TƯỢNG DIGITAL TWIN DUY NHẤT
 digital_twin = NetworkModel("Main Digital Twin")
 
-#  SỬA: Xây dựng đường dẫn đúng
-current_dir = os.path.dirname(os.path.abspath(__file__))
-config_path = os.path.join(current_dir, '..', 'topology.json')
-config_path = os.path.abspath(config_path)
+# #  SỬA: Xây dựng đường dẫn đúng
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# config_path = os.path.join(current_dir, '..', 'topology.json')
+# config_path = os.path.abspath(config_path)
 
-# KIỂM TRA FILE TỒN TẠI
-if not os.path.exists(config_path):
-    print(f"[LỖI NGHIÊM TRỌNG] Không tìm thấy file topology.json tại '{config_path}'")
-    print("[HƯỚNG DẪN] Hãy tạo file topology.json ở thư mục gốc dự án")
-    sys.exit(1)
+# # KIỂM TRA FILE TỒN TẠI
+# if not os.path.exists(config_path):
+#     print(f"[LỖI NGHIÊM TRỌNG] Không tìm thấy file topology.json tại '{config_path}'")
+#     print("[HƯỚNG DẪN] Hãy tạo file topology.json ở thư mục gốc dự án")
+#     sys.exit(1)
 
-# ĐỌC VÀ PARSE JSON
-try:
-    with open(config_path, 'r', encoding='utf-8') as f:
-        topo_config = json.load(f)
+# # ĐỌC VÀ PARSE JSON
+# try:
+#     with open(config_path, 'r', encoding='utf-8') as f:
+#         topo_config = json.load(f)
     
-    print(f"[✓] Đã load topology.json thành công từ: {config_path}")
+#     print(f" Đã load topology.json thành công từ: {config_path}")
     
-except json.JSONDecodeError as e:
-    print(f"[LỖI] File topology.json có lỗi cú pháp JSON: {e}")
-    sys.exit(1)
-except Exception as e:
-    print(f"[LỖI] Không thể đọc file topology.json: {e}")
-    sys.exit(1)
+# except json.JSONDecodeError as e:
+#     print(f"[LỖI] File topology.json có lỗi cú pháp JSON: {e}")
+#     sys.exit(1)
+# except Exception as e:
+#     print(f"[LỖI] Không thể đọc file topology.json: {e}")
+#     sys.exit(1)
 
-#  XÂY DỰNG DIGITAL TWIN TỪ CONFIG
-try:
-    # Thêm hosts
-    for host in topo_config.get('hosts', []):
-        digital_twin.add_host(
-            host['name'], 
-            host['ip'], 
-            host.get('mac', '00:00:00:00:00:00')
-        )
-    
-    # Thêm switches
-    for switch in topo_config.get('switches', []):
-        digital_twin.add_switch(
-            switch['name'], 
-            switch.get('dpid', '0000000000000001')
-        )
-    
-    # Thêm links
-    for link in topo_config.get('links', []):
-        digital_twin.add_link(
-            link['from'], 
-            link['to'], 
-            link.get('bw', 100)
-        )
-    
-    print(f"[✓] 'Bộ não' Digital Twin đã sẵn sàng")
-    print(f"    - {len(digital_twin.hosts)} hosts")
-    print(f"    - {len(digital_twin.switches)} switches")
-    print(f"    - {len(digital_twin.links)} links")
-    
-except KeyError as e:
-    print(f"[LỖI] File topology.json thiếu trường bắt buộc: {e}")
-    sys.exit(1)
-except Exception as e:
-    print(f"[LỖI] Không thể xây dựng Digital Twin: {e}")
-    sys.exit(1)
 
+# ============================================
+# API ENDPOINTS
+# ============================================
+@app.route('/api/init/topology', methods=['POST'])
+def init_topology():
+    """
+    API MỚI: Để Mininet gửi toàn bộ topology (hosts, switches, links)
+    lên Backend để 'mồi' (seed) tự động.
+    """
+    data = request.json
+    if not data:
+        return jsonify({"status": "error", "message": "No data provided"}), 400
+
+    print(">>> Nhận yêu cầu khởi tạo topology từ Mininet...")
+
+    # Xóa toàn bộ topology cũ (để đảm bảo không bị trùng lặp)
+    digital_twin.hosts.clear()
+    digital_twin.switches.clear()
+    digital_twin.links.clear()
+
+    try:
+        # 1. Thêm tất cả Hosts
+        for host_data in data.get('hosts', []):
+            digital_twin.add_host(
+                host_data['name'],
+                host_data['ip'],
+                host_data.get('mac', '00:00:00:00:00:00')
+            )
+
+        # 2. Thêm tất cả Switches
+        for switch_data in data.get('switches', []):
+            digital_twin.add_switch(
+                switch_data['name'],
+                switch_data.get('dpid', '0000000000000001')
+            )
+
+        # 3. Thêm tất cả Links
+        for link_data in data.get('links', []):
+            digital_twin.add_link(
+                link_data['node1'],
+                link_data['node2'],
+                link_data.get('bandwidth', 100)
+            )
+
+        print(f">>> 'Mồi' topology thành công:")
+        print(f"    - {len(digital_twin.hosts)} hosts")
+        print(f"    - {len(digital_twin.switches)} switches")
+        print(f"    - {len(digital_twin.links)} links")
+        
+        return jsonify({"status": "success", "message": "Topology initialized"})
+    
+    except KeyError as e:
+        # Nếu data gửi lên bị thiếu (ví dụ: host thiếu 'name')
+        return jsonify({"status": "error", "message": f"Topology data missing required key: {e}"}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Failed to build topology: {e}"}), 500
 
 # ============================================
 # API ENDPOINTS
