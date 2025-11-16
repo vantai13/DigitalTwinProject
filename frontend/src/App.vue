@@ -19,77 +19,38 @@ const connectionStatus = ref('connecting') // 'connecting', 'connected', 'error'
 const retryCount = ref(0)
 const maxRetries = 3
 
-const socket = ref(null)
+// ✅ SỬA LỖI: Khai báo socket NGOÀI onMounted
+let socket = null
 
 // ============================================
 // API FUNCTIONS
 // ============================================
 const API_BASE_URL = 'http://localhost:5000/api'
+const SOCKET_URL = 'http://localhost:5000'
 
-async function fetchData() {
-  try {
-    const response = await axios.get(`${API_BASE_URL}/network/status`, {
-      timeout: 5000 // 5s timeout
-    })
-    
-    networkData.value = response.data
-    errorMessage.value = null
-    connectionStatus.value = 'connected'
-    retryCount.value = 0 // Reset retry count on success
-    
-  } catch (error) {
-    console.error(" Lỗi khi gọi API:", error)
-    
-    if (error.code === 'ECONNABORTED') {
-      errorMessage.value = "⏱️ Timeout: Backend phản hồi quá chậm"
-    } else if (error.code === 'ERR_NETWORK') {
-      errorMessage.value = "🔌 Không thể kết nối đến Backend Flask"
-    } else if (error.response) {
-      errorMessage.value = `❌ Backend trả về lỗi ${error.response.status}`
-    } else {
-      errorMessage.value = "❓ Lỗi không xác định"
-    }
-    
-    connectionStatus.value = 'error'
-    retryCount.value++
-    
-    // Dừng polling nếu lỗi quá nhiều
-    if (retryCount.value >= maxRetries && pollingInterval) {
-      clearInterval(pollingInterval)
-      console.warn(`⚠️ Đã dừng polling sau ${maxRetries} lần thất bại`)
-    }
-    
-  } finally {
-    isLoading.value = false
-  }
-}
-
-// Health check để kiểm tra Backend có sống không
 async function checkBackendHealth() {
   try {
     const response = await axios.get(`${API_BASE_URL}/health`, {
       timeout: 2000
     })
-    console.log(' Backend health:', response.data)
+    console.log('✅ Backend health:', response.data)
     return true
   } catch (error) {
-    console.error(' Backend không phản hồi:', error.message)
+    console.error('❌ Backend không phản hồi:', error.message)
     return false
   }
 }
 
-// Manual retry
 function retryConnection() {
   retryCount.value = 0
   errorMessage.value = null
   connectionStatus.value = 'connecting'
   isLoading.value = true
   
-  fetchData()
-  
-  // Restart polling
-  if (!pollingInterval) {
-    pollingInterval = setInterval(fetchData, 2000)
+  // ✅ Reconnect socket
+  if (socket) {
+    socket.disconnect()
+    socket.connect()
   }
 }
 
@@ -112,12 +73,112 @@ function handleSelectionCleared() {
 }
 
 // ============================================
+// WEBSOCKET SETUP
+// ============================================
+function setupWebSocket() {
+  console.log('🔌 Đang kết nối WebSocket...')
+  
+  socket = io(SOCKET_URL, {
+    transports: ['websocket', 'polling'],  // ✅ Thử websocket trước
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionAttempts: 5
+  })
+
+  // 1. ✅ Nhận trạng thái ban đầu
+  socket.on('initial_state', (data) => {
+    console.log('✅ Nhận initial_state từ Backend')
+    networkData.value = data
+    isLoading.value = false
+    connectionStatus.value = 'connected'
+    errorMessage.value = null
+  })
+
+  // 2. ✅ Lắng nghe cập nhật Host
+  socket.on('host_updated', (updatedHost) => {
+    if (!networkData.value) return
+    console.log('🔄 Host updated:', updatedHost.name)
+
+    const index = networkData.value.graph_data.nodes.findIndex(
+      n => n.id === updatedHost.name && n.group.startsWith('host')
+    )
+    
+    if (index !== -1) {
+      const oldNode = networkData.value.graph_data.nodes[index]
+      networkData.value.graph_data.nodes[index] = {
+        ...oldNode,
+        details: updatedHost
+      }
+    }
+  })
+
+  // 3. ✅ Lắng nghe cập nhật Switch
+  socket.on('switch_updated', (updatedSwitch) => {
+    if (!networkData.value) return
+    console.log('🔄 Switch updated:', updatedSwitch.name)
+
+    const index = networkData.value.graph_data.nodes.findIndex(
+      n => n.id === updatedSwitch.name && n.group.startsWith('switch')
+    )
+    
+    if (index !== -1) {
+      const oldNode = networkData.value.graph_data.nodes[index]
+      networkData.value.graph_data.nodes[index] = {
+        ...oldNode,
+        details: updatedSwitch
+      }
+    }
+  })
+
+  // 4. ✅ Lắng nghe cập nhật Link
+  socket.on('link_updated', (updatedLink) => {
+    if (!networkData.value) return
+    console.log('🔄 Link updated:', updatedLink.id)
+    
+    const index = networkData.value.graph_data.edges.findIndex(
+      e => e.id === updatedLink.id
+    )
+    
+    if (index !== -1) {
+      const oldEdge = networkData.value.graph_data.edges[index]
+      networkData.value.graph_data.edges[index] = {
+        ...oldEdge,
+        label: `${updatedLink.current_throughput.toFixed(1)} Mbps`,
+        utilization: updatedLink.utilization,
+        status: updatedLink.status,
+        details: updatedLink
+      }
+    }
+  })
+  
+  // 5. ✅ Xử lý kết nối thành công
+  socket.on('connect', () => {
+    console.log('✅ WebSocket connected!')
+    connectionStatus.value = 'connected'
+    errorMessage.value = null
+  })
+
+  // 6. ✅ Xử lý mất kết nối
+  socket.on('disconnect', (reason) => {
+    console.warn('❌ WebSocket disconnected:', reason)
+    connectionStatus.value = 'error'
+    errorMessage.value = '🔌 Mất kết nối tới máy chủ real-time.'
+  })
+
+  // 7. ✅ Xử lý lỗi kết nối
+  socket.on('connect_error', (error) => {
+    console.error('❌ WebSocket error:', error.message)
+    connectionStatus.value = 'error'
+    errorMessage.value = `🔴 Không thể kết nối WebSocket: ${error.message}`
+    isLoading.value = false
+  })
+}
+
+// ============================================
 // LIFECYCLE
 // ============================================
-// frontend/src/App.vue
-
 onMounted(async () => {
-  console.log('Frontend đang khởi động...')
+  console.log('🚀 Frontend đang khởi động...')
   
   const isHealthy = await checkBackendHealth()
   
@@ -127,92 +188,16 @@ onMounted(async () => {
     isLoading.value = false
     return
   }
-  
-  const socket = io('http://localhost:5000')
 
-  // 1. Nhận trạng thái ban đầu
-  socket.on('initial_state', (data) => {
-    console.log("Nhận trạng thái ban đầu!")
-    networkData.value = data
-    isLoading.value = false
-    connectionStatus.value = 'connected' // <-- ĐÃ SỬA LỖI 1
-  })
-
-  // 2. Lắng nghe tin 'host_updated'
-  socket.on('host_updated', (updatedHost) => {
-    if (!networkData.value) return;
-    console.log("Host updated:", updatedHost.name)
-
-    const index = networkData.value.graph_data.nodes.findIndex(
-      n => n.id === updatedHost.name && n.group === 'host'
-    )
-    if (index !== -1) {
-      const oldNode = networkData.value.graph_data.nodes[index];
-      networkData.value.graph_data.nodes[index] = {
-         ...oldNode,
-         details: updatedHost 
-      };
-    }
-  })
-
-  // 3. Lắng nghe tin 'switch_updated' (TƯƠNG TỰ HOST)
-  socket.on('switch_updated', (updatedSwitch) => {
-    if (!networkData.value) return;
-    console.log("Switch updated:", updatedSwitch.name)
-
-    const index = networkData.value.graph_data.nodes.findIndex(
-      n => n.id === updatedSwitch.name && n.group === 'switch'
-    )
-    if (index !== -1) {
-      const oldNode = networkData.value.graph_data.nodes[index];
-      networkData.value.graph_data.nodes[index] = {
-         ...oldNode,
-         details: updatedSwitch 
-      };
-    }
-  })
-
-
-  // 4. Lắng nghe tin 'link_updated' (TƯƠNG TỰ LINK/EDGE)
-  socket.on('link_updated', (updatedLink) => {
-    if (!networkData.value) return;
-    console.log("Link updated:", updatedLink.id)
-    
-    const index = networkData.value.graph_data.edges.findIndex(
-      e => e.id === updatedLink.id
-    )
-    if (index !== -1) {
-      const oldEdge = networkData.value.graph_data.edges[index];
-      networkData.value.graph_data.edges[index] = {
-         ...oldEdge,
-         label: `${updatedLink.current_throughput.toFixed(1)} Mbps`,
-         utilization: updatedLink.utilization,
-         status: updatedLink.status,
-         details: updatedLink 
-      };
-    }
-  })
-  
-  // 5. Xử lý mất kết nối
-  socket.on('disconnect', () => {
-    console.warn("Mất kết nối WebSocket!")
-    connectionStatus.value = 'error'
-    errorMessage.value = "🔌 Mất kết nối tới máy chủ real-time."
-  })
-  
-  // 6. Xử lý kết nối lại
-  socket.on('connect', () => {
-    // Khi kết nối lại, server sẽ tự động gửi lại 'initial_state'
-    // nên chúng ta chỉ cần reset trạng thái
-    console.log("Kết nối lại WebSocket thành công!")
-    connectionStatus.value = 'connecting' // Chờ 'initial_state' mới
-    isLoading.value = true
-  })
-
+  // ✅ Khởi tạo WebSocket
+  setupWebSocket()
 })
 
 onUnmounted(() => {
-  socket.disconnect()
+  if (socket) {
+    console.log('🔌 Đang ngắt kết nối WebSocket...')
+    socket.disconnect()
+  }
 })
 </script>
 
@@ -220,9 +205,7 @@ onUnmounted(() => {
   <div class="app-container">
     <Header />
 
-    <!-- ============================================ -->
-    <!-- MAIN CONTENT (Khi có dữ liệu) -->
-    <!-- ============================================ -->
+    <!-- MAIN CONTENT -->
     <div v-if="networkData && connectionStatus === 'connected'" class="main-content">
       <TopologyView 
         :graphData="networkData.graph_data"
@@ -238,17 +221,13 @@ onUnmounted(() => {
       />
     </div>
 
-    <!-- ============================================ -->
     <!-- LOADING STATE -->
-    <!-- ============================================ -->
     <div v-if="isLoading && connectionStatus !== 'error'" class="loading-container">
       <div class="loading-spinner"></div>
       <p>Đang kết nối đến Backend Flask...</p>
     </div>
 
-    <!-- ============================================ -->
     <!-- ERROR STATE -->
-    <!-- ============================================ -->
     <div v-if="errorMessage && connectionStatus === 'error'" class="error-container">
       <div class="error-icon">⚠️</div>
       <h2>Không thể kết nối</h2>
@@ -269,9 +248,7 @@ onUnmounted(() => {
       </button>
     </div>
 
-    <!-- ============================================ -->
-    <!-- CONNECTION STATUS INDICATOR (Bottom) -->
-    <!-- ============================================ -->
+    <!-- CONNECTION STATUS INDICATOR -->
     <div class="status-indicator" :class="connectionStatus">
       <span class="status-dot"></span>
       <span v-if="connectionStatus === 'connected'">Đã kết nối</span>
@@ -282,9 +259,7 @@ onUnmounted(() => {
 </template>
 
 <style>
-/* ============================================ */
-/* GLOBAL STYLES */
-/* ============================================ */
+/* (Giữ nguyên CSS như cũ) */
 body, html {
   margin: 0;
   padding: 0;
@@ -306,9 +281,6 @@ body, html {
   overflow: hidden;
 }
 
-/* ============================================ */
-/* LOADING STATE */
-/* ============================================ */
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -333,9 +305,6 @@ body, html {
   100% { transform: rotate(360deg); }
 }
 
-/* ============================================ */
-/* ERROR STATE */
-/* ============================================ */
 .error-container {
   display: flex;
   flex-direction: column;
@@ -403,9 +372,6 @@ body, html {
   box-shadow: 0 4px 12px rgba(0, 247, 247, 0.4);
 }
 
-/* ============================================ */
-/* CONNECTION STATUS INDICATOR */
-/* ============================================ */
 .status-indicator {
   position: fixed;
   bottom: 20px;
@@ -466,9 +432,6 @@ body, html {
   }
 }
 
-/* ============================================ */
-/* RESPONSIVE */
-/* ============================================ */
 @media (max-width: 768px) {
   .main-content {
     flex-direction: column;
