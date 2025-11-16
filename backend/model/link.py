@@ -1,4 +1,5 @@
 
+from datetime import datetime
 class Link:
 
     def __init__(self, node1, node2, bandwidth_capacity):
@@ -13,8 +14,11 @@ class Link:
         self.node1 = node1
         self.node2 = node2
         self.bandwidth_capacity = bandwidth_capacity  # (Mbps)
+
         
         self.status = 'unknown'  
+
+        self.last_update_time = None
         
         # Đây là các số liệu hiệu năng (performance metrics)
         # mà chúng ta muốn đồng bộ hóa từ Mininet ( dùng iPerf).
@@ -33,6 +37,7 @@ class Link:
         """
         Cập nhật các số liệu hiệu năng (dữ liệu từ iPerf!).
         """
+        self.last_update_time = datetime.now()
         self.current_throughput = throughput
         self.latency = latency
         self.jitter = jitter

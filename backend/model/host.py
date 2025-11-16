@@ -1,3 +1,4 @@
+from datetime import datetime
 class Host:
 
     HIGH_CPU_THRESHOLD = 90.0  # ngưỡng CPU cao (%)
@@ -12,6 +13,7 @@ class Host:
         self.name = name
         self.ip_address = ip_address
         self.mac_address = mac_address
+        self.last_update_time = None
         
 
         self.status = 'unknown'  # Trạng thái ban đầu
@@ -36,6 +38,7 @@ class Host:
     def update_resource_metrics(self, cpu, memory):
         self.cpu_utilization = cpu
         self.memory_usage = memory
+        self.last_update_time = datetime.now()
 
         if self.status != 'offline':
             

@@ -3,6 +3,9 @@ import os
 import json
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import threading
+from datetime import datetime, timedelta
+import time
 
 try:
     from model.host import Host
@@ -161,6 +164,17 @@ def get_network_status():
     snapshot = digital_twin.get_network_snapshot()
     return jsonify(snapshot)
 
+@app.route('/api/update/switch/<switch_name>/heartbeat', methods=['POST'])
+def update_switch_heartbeat(switch_name):
+    """Nhận tín hiệu 'heartbeat' từ Switch."""
+    switch_obj = digital_twin.get_switch(switch_name)
+    
+    if not switch_obj:
+        return jsonify({"status": "error", "message": "Switch not found"}), 404
+    
+    switch_obj.heartbeat() 
+    return jsonify({"status": "success"})
+
 
 # ============================================
 # HEALTH CHECK 
@@ -177,6 +191,57 @@ def health_check():
     })
 
 
+def check_device_status_loop():
+    """
+    Hàm chạy nền để kiểm tra
+    thiết bị nào đã lâu không gửi "nhịp tim".
+    """
+
+    TIMEOUT_SECONDS = 10.0 
+
+    print(f" Kiểm tra thiết bị mỗi 5 giây (Timeout: {TIMEOUT_SECONDS}s)")
+
+    while True:
+        try:
+            time.sleep(5) 
+            now = datetime.now()
+            timeout_threshold = timedelta(seconds=TIMEOUT_SECONDS)
+
+            # 2. Đi kiểm tra tất cả Hosts
+            for host in digital_twin.hosts.values():
+                if host.last_update_time: # Chỉ kiểm tra nếu đã từng có nhịp tim
+                    if (now - host.last_update_time) > timeout_threshold:
+                        if host.status != 'offline':
+                            print(f"[Reaper] Host {host.name} đã timeout -> OFFLINE")
+                            host.set_status('offline')
+                elif host.status != 'offline':
+                     # Nếu host chưa bao giờ có nhịp tim (vừa khởi tạo)
+                     # và chưa bị set là offline
+                     pass # Có thể cho nó 1 khoảng thời gian chờ (grace period)
+
+            # 3. Đi kiểm tra tất cả Switches
+            for switch in digital_twin.switches.values():
+                if switch.last_update_time:
+                    if (now - switch.last_update_time) > timeout_threshold:
+                        if switch.status != 'offline':
+                            print(f"[Reaper] Switch {switch.name} đã timeout -> OFFLINE")
+                            switch.set_status('offline')
+
+            # 4. Đi kiểm tra tất cả Links
+            for link in digital_twin.links.values():
+                if link.last_update_time:
+                    if (now - link.last_update_time) > timeout_threshold:
+                        if link.status != 'down':
+                            print(f"[Reaper] Link {link.id} đã timeout -> DOWN")
+                            link.set_status('down')
+
+        except Exception as e:
+            # Đảm bảo vòng lặp không bao giờ chết
+            print(f"[Reaper Lỗi] {e}")
+
+
+reaper_thread = threading.Thread(target=check_device_status_loop, daemon=True)
+reaper_thread.start()
 if __name__ == '__main__':
     print("\n" + "="*50)
     print("FLASK BACKEND ĐÃ KHỞI ĐỘNG")

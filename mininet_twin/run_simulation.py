@@ -2,6 +2,7 @@ import time
 import requests
 import re
 import os
+import link_collector
 import json
 from mininet.net import Mininet
 from mininet.topo import Topo
@@ -61,6 +62,14 @@ def push_link_data_to_api(link_id, throughput_mbps):
         pass
     except requests.exceptions.RequestException as e:
         print(f"[Lỗi API] Không thể đẩy dữ liệu cho {link_id}: {e}")
+
+def push_switch_heartbeat_to_api(switch_name):
+    """Gửi tín hiệu 'còn sống' nhân tạo cho Switch."""
+    url = f"{API_BASE_URL}/update/switch/{switch_name}/heartbeat"
+    try:
+        requests.post(url, timeout=0.5)
+    except Exception:
+        pass
 
 def push_topology_to_backend(net):
     """
@@ -196,25 +205,29 @@ def run_simulation():
         net.stop()
         return
 
-    # Lấy các đối tượng host và link
-    h1 = net.get('h1')
-    h2 = net.get('h2')
-    
-    # Khởi động iPerf server trên h2
-    print(">>> Khởi động iPerf server trên h2...")
-    h2.cmd('iperf -s -u &')  # UDP server, chạy nền (&)
-    # (Hoặc dùng TCP: h2.cmd('iperf -s &'))
-    
-    # Đợi server khởi động
-    import time
-    time.sleep(1)
-    
     # -------------------------------------------------
-    # THÊM MỚI: Khởi động iPerf Client trên h1 (tạo traffic liên tục)
+    # KHỞI ĐỘNG IPERF ĐỘNG (DYNAMIC)
     # -------------------------------------------------
-    print(">>> Khởi động iPerf client trên h1 (gửi traffic đến h2)...")
-    # UDP, 10 Mbps, chạy vô tận (-t 999999 giây)
-    h1.cmd('iperf -c 10.0.0.2 -u -b 10M -t 999999 &')
+    if len(net.hosts) < 2:
+        print("[Lỗi] Cần ít nhất 2 host trong topology để khởi động iPerf.")
+    else:
+        # Chọn host cuối cùng làm Server
+        server = net.hosts[-1]
+        server_ip = server.IP()
+        print(f">>> Khởi động iPerf server trên {server.name} ({server_ip})...")
+        server.cmd('iperf -s -u &') # UDP server, chạy nền
+        time.sleep(1) # Đợi server khởi động
+
+        # Cho tất cả host khác làm Client
+        client_hosts = net.hosts[:-1] # Lấy tất cả trừ host cuối
+        
+        # Tạo traffic khác nhau cho đa dạng
+        traffic_rates = ["5M", "8M", "3M", "6M"] 
+        
+        for i, client in enumerate(client_hosts):
+            rate = traffic_rates[i % len(traffic_rates)] # Chọn tỉ lệ traffic
+            print(f">>> Khởi động iPerf client trên {client.name} (gửi {rate} đến {server.name})...")
+            client.cmd(f'iperf -c {server_ip} -u -b {rate} -t 999999 &')
     
    
     
@@ -227,58 +240,39 @@ def run_simulation():
         # "Bộ nhớ" để lưu trữ số bytes của lần lặp trước
         link_byte_counters = {}
 
-        collector.list_all_interfaces(h1)
-        collector.list_all_interfaces(h2)
+        # collector.list_all_interfaces(h1)
+        # collector.list_all_interfaces(h2)
+
+        for i in range(len(net.hosts)):
+            collector.list_all_interfaces(net.hosts[i])
         # ---------------------------------------------
         # VÒNG LẶP ĐỒNG BỘ HÓA (THE SYNC LOOP)
         # ---------------------------------------------
         while True:
             
-            # Lặp qua tất cả các host trong mạng
+            # --- 1. XỬ LÝ HOSTS ---
             for host in net.hosts:
-                # 1. THU THẬP (Collect)
                 cpu = collector.get_host_cpu_usage(host)
                 mem = collector.get_host_memory_usage(host)
-                
                 print(f"[{host.name}] CPU: {cpu}% | Mem: {mem}%")
                 push_host_data_to_api(host.name, cpu, mem)
 
-            for link in net.links:
-                if not link.intf1 or not link.intf2:
-                    continue
-                
-                intf1 = link.intf1
-                intf2 = link.intf2
-                node1 = intf1.node
-                node2 = intf2.node
-                
-                link_id = "-".join(sorted([node1.name, node2.name]))
-                
-                # Đo cả 2 phía
-                rx1, tx1 = collector.get_interface_bytes(node1, intf1.name)
-                rx2, tx2 = collector.get_interface_bytes(node2, intf2.name)
-                
-                # Lấy giá trị cũ
-                prev_tx1, prev_tx2 = link_byte_counters.get(link_id, (0, 0))
-                
-                # TX của node1 = RX của node2 (và ngược lại)
-                # Chọn MAX để tránh mất dữ liệu
-                delta_1to2 = tx1 - prev_tx1  # node1 → node2
-                delta_2to1 = tx2 - prev_tx2  # node2 → node1
-                
-                # Tổng lưu lượng
-                total_delta = delta_1to2 + delta_2to1
-                
-                if total_delta < 0:
-                    total_delta = 0
-                
-                throughput_bps = total_delta / SYNC_INTERVAL
-                throughput_mbps = round((throughput_bps * 8) / 1_000_000, 2)
-                
-                print(f"[{link_id}] Bidirectional Throughput: {throughput_mbps} Mbps")
-                push_link_data_to_api(link_id, throughput_mbps)
-                
-                link_byte_counters[link_id] = (tx1, tx2)
+            # --- 2. XỬ LÝ SWITCHES ---
+            for switch in net.switches:
+                push_switch_heartbeat_to_api(switch.name)
+
+            # --- 3. XỬ LÝ LINKS (ĐÃ GỌN GÀNG) ---
+            link_metrics = link_collector.collect_link_metrics(
+                net, link_byte_counters, SYNC_INTERVAL
+            )
+            
+            for link_id, throughput in link_metrics.items():
+                print(f"[{link_id}] Bidirectional Throughput: {throughput} Mbps")
+                push_link_data_to_api(link_id, throughput)
+
+            # --- 4. NGHỈ ---
+            # (Đảm bảo time.sleep ở ngoài cùng, như đã sửa)
+            time.sleep(SYNC_INTERVAL)
         
             
     except KeyboardInterrupt:

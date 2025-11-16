@@ -1,3 +1,4 @@
+from datetime import datetime
 class Switch:
     def __init__(self, name, dpid):
         """
@@ -10,6 +11,8 @@ class Switch:
         self.dpid = dpid
 
         self.status = 'unknown' 
+
+        self.last_update_time = None
         
         # Danh sách các cổng (ports) mà switch này đang kết nối
         # Chúng ta có thể lưu tên của các interface (ví dụ: 's1-eth1', 's1-eth2')
@@ -39,6 +42,15 @@ class Switch:
         self.port_list = port_list
         print(f"[{self.name}] Đã cập nhật cổng: {self.port_list}")
 
+    def heartbeat(self):
+        self.last_update_time = datetime.now()
+        # Nếu nó đang 'offline', đánh dấu nó 'up' trở lại
+        # if self.status == 'offline':
+        #     self.set_status('up')
+
+        if self.status != 'up':
+            self.set_status('up')
+
     def get_info(self):
         print("--- Thông tin Switch ---")
         print(f"  Tên    : {self.name}")
@@ -47,6 +59,8 @@ class Switch:
         print(f"  Cổng   : {', '.join(self.port_list)}")
         print(f"  Số luồng: {len(self.flow_table)}")
         print("------------------------")
+
+    
 
     def to_json(self):
         return {
