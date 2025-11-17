@@ -255,6 +255,51 @@ def health_check():
 
 
 # ============================================
+# [MỚI] XỬ LÝ DỮ LIỆU TỪ MININET QUA WEBSOCKET
+# ============================================
+@socketio.on('mininet_telemetry')
+def handle_mininet_telemetry(data):
+    """
+    Nhận gói tin tổng hợp từ Mininet và cập nhật Digital Twin.
+    Dữ liệu data có dạng:
+    {
+        "hosts": [{"name": "h1", "cpu": 10.5, "mem": 45.2}, ...],
+        "links": [{"id": "h1-s1", "bw": 15.5}, ...],
+        "switches": ["s1", "s2"]
+    }
+    """
+    # Dùng Lock để an toàn dữ liệu khi nhiều luồng truy cập
+    with data_lock:
+        # 1. Cập nhật Hosts
+        for h_data in data.get('hosts', []):
+            host = digital_twin.get_host(h_data['name'])
+            if host:
+                # Cập nhật metrics vào Model
+                host.update_resource_metrics(h_data['cpu'], h_data['mem'])
+                # Bắn tin ngay lập tức cho Frontend (VueJS)
+                broadcast_host_update(host)
+
+        # 2. Cập nhật Links
+        for l_data in data.get('links', []):
+            # Tách ID "h1-s1" thành node1="h1", node2="s1"
+            parts = l_data['id'].split('-')
+            if len(parts) == 2:
+                link = digital_twin.get_link(parts[0], parts[1])
+                if link:
+                    link.update_performance_metrics(l_data['bw'], 0) # 0 là latency (tạm thời)
+                    broadcast_link_update(link)
+
+        # 3. Cập nhật Switches (Heartbeat)
+        for s_name in data.get('switches', []):
+            switch = digital_twin.get_switch(s_name)
+            if switch:
+                switch.heartbeat()
+                broadcast_switch_update(switch)
+
+    # (Tùy chọn) In log nhẹ để biết đang nhận tin
+    # logger.info(f"Đã nhận telemetry từ Mininet: {len(data['hosts'])} hosts")
+
+# ============================================
 # REAPER THREAD (Giữ nguyên)
 # ============================================
 

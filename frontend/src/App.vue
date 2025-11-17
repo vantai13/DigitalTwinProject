@@ -43,10 +43,10 @@ let updateTimer = null
 async function checkBackendHealth() {
   try {
     const response = await axios.get(`${API_BASE_URL}/health`, { timeout: 2000 })
-    console.log('✅ Backend health:', response.data)
+    console.log('Backend health:', response.data)
     return true
   } catch (error) {
-    console.error('❌ Backend check failed:', error.message)
+    console.error(' Backend check failed:', error.message)
     return false
   }
 }
@@ -127,7 +127,7 @@ function setupWebSocket() {
   })
 
   socket.on('connect', () => {
-    console.log('✅ WebSocket Connected!')
+    console.log(' WebSocket Connected!')
     connectionStatus.value = 'connected'
     errorMessage.value = null
     retryCount.value = 0
@@ -169,7 +169,7 @@ function setupWebSocket() {
       }, waitTime)
       
     } else {
-      errorMessage.value = "❌ Unable to connect to Backend. Please check if the server is running."
+      errorMessage.value = " Unable to connect to Backend. Please check if the server is running."
       isLoading.value = false
     }
   })
@@ -202,7 +202,7 @@ onMounted(async () => {
 onUnmounted(() => {
   // Dọn dẹp sạch sẽ khi thoát
   if (socket) {
-    console.log('🛑 Disconnecting socket...')
+    console.log(' Disconnecting socket...')
     socket.disconnect()
     socket = null
   }
