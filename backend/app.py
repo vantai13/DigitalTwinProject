@@ -8,6 +8,7 @@ import threading
 from datetime import datetime, timedelta
 import time
 import logging
+from threading import Lock
 
 try:
     from model.host import Host
@@ -54,6 +55,7 @@ socketio = SocketIO(
 # TẠO ĐỐI TƯỢNG DIGITAL TWIN
 digital_twin = NetworkModel("Main Digital Twin")
 
+data_lock = Lock()
 
 # ============================================
 # WEBSOCKET EVENT HANDLERS
@@ -172,16 +174,15 @@ def update_host_data(hostname):
     data = request.get_json(silent=True) or {}
     host_obj = digital_twin.get_host(hostname)
     
-    if not host_obj:
-        return jsonify({
-            "status": "error", 
-            "message": f"Host '{hostname}' không tồn tại"
-        }), 404
-    
-    cpu = data.get('cpu', 0.0)
-    memory = data.get('memory', 0.0)
-    host_obj.update_resource_metrics(cpu, memory)
-    
+    with data_lock: 
+        host_obj = digital_twin.get_host(hostname)
+        if not host_obj:
+            return jsonify({"status": "error"}), 404
+        
+        cpu = data.get('cpu', 0.0)
+        memory = data.get('memory', 0.0)
+        host_obj.update_resource_metrics(cpu, memory)
+        
     # PHÁT WEBSOCKET EVENT
     broadcast_host_update(host_obj)
     

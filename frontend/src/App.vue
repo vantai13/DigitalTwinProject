@@ -8,37 +8,96 @@ import TopologyView from './components/TopologyView.vue'
 import InfoPanel from './components/InfoPanel.vue'
 
 // ============================================
-// STATE MANAGEMENT
+// 1. CONFIGURATION (ENV VARIABLES)
+// ============================================
+// Tự động lấy từ file .env hoặc dùng mặc định nếu đang dev
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'
+
+// ============================================
+// 2. STATE MANAGEMENT
 // ============================================
 const networkData = ref(null)
 const isLoading = ref(true)
 const errorMessage = ref(null)
 const selectedNodeId = ref(null)
 const selectedEdgeId = ref(null)
-const connectionStatus = ref('connecting') // 'connecting', 'connected', 'error'
-const retryCount = ref(0)
-const maxRetries = 3
+const connectionStatus = ref('connecting') 
 
-// Khai báo socket NGOÀI onMounted
+// Retry Logic
+const retryCount = ref(0)
+const MAX_RETRIES = 3
+let retryTimer = null
+
+// Socket Instance (Khai báo ở phạm vi Module để truy cập toàn cục trong file)
 let socket = null
 
+// Batch Update Queue (Hàng đợi cập nhật)
+let updateQueue = []
+let updateTimer = null
+
 // ============================================
-// API FUNCTIONS
+// 3. HELPER FUNCTIONS
 // ============================================
-const API_BASE_URL = 'http://localhost:5000/api'
-const SOCKET_URL = 'http://localhost:5000'
 
 async function checkBackendHealth() {
   try {
-    const response = await axios.get(`${API_BASE_URL}/health`, {
-      timeout: 2000
-    })
-    console.log('Backend health:', response.data)
+    const response = await axios.get(`${API_BASE_URL}/health`, { timeout: 2000 })
+    console.log('✅ Backend health:', response.data)
     return true
   } catch (error) {
-    console.error(' Backend không phản hồi:', error.message)
+    console.error('❌ Backend check failed:', error.message)
     return false
   }
+}
+
+// Hàm xử lý Batch Update (Tư duy người bồi bàn)
+function processUpdateQueue() {
+  if (!networkData.value || updateQueue.length === 0) return
+
+  // Lặp qua hàng đợi và cập nhật dữ liệu
+  // Việc này diễn ra rất nhanh trong bộ nhớ JS
+  updateQueue.forEach(item => {
+    const { type, data } = item
+    
+    if (type === 'node') {
+      // Tìm và cập nhật Node (Host/Switch)
+      const index = networkData.value.graph_data.nodes.findIndex(n => n.id === data.name)
+      if (index !== -1) {
+        // Giữ nguyên vị trí cũ, chỉ update details
+        const oldNode = networkData.value.graph_data.nodes[index]
+        networkData.value.graph_data.nodes[index] = { ...oldNode, details: data }
+      }
+    } else if (type === 'link') {
+      // Tìm và cập nhật Link
+      const index = networkData.value.graph_data.edges.findIndex(e => e.id === data.id)
+      if (index !== -1) {
+        const oldEdge = networkData.value.graph_data.edges[index]
+        networkData.value.graph_data.edges[index] = {
+          ...oldEdge,
+          label: `${data.current_throughput.toFixed(1)} Mbps`,
+          utilization: data.utilization,
+          status: data.status,
+          details: data
+        }
+      }
+    }
+  })
+
+  // Dọn sạch hàng đợi
+  updateQueue = []
+  // Vue sẽ tự động gom các thay đổi trong networkData thành 1 lần re-render DOM
+}
+
+// Hàm helper để đẩy vào hàng đợi
+function queueUpdate(type, data) {
+  updateQueue.push({ type, data })
+  
+  // Reset timer cũ
+  if (updateTimer) clearTimeout(updateTimer)
+  
+  // Đợi 50ms, nếu không có gì thêm mới chạy processUpdateQueue
+  updateTimer = setTimeout(processUpdateQueue, 50)
 }
 
 function retryConnection() {
@@ -47,159 +106,120 @@ function retryConnection() {
   connectionStatus.value = 'connecting'
   isLoading.value = true
   
-  // econnect socket
   if (socket) {
-    socket.disconnect()
     socket.connect()
+  } else {
+    setupWebSocket()
   }
 }
 
 // ============================================
-// EVENT HANDLERS
-// ============================================
-function handleNodeSelected(nodeId) {
-  selectedNodeId.value = nodeId
-  selectedEdgeId.value = null
-}
-
-function handleEdgeSelected(edgeId) {
-  selectedEdgeId.value = edgeId
-  selectedNodeId.value = null
-}
-
-function handleSelectionCleared() {
-  selectedNodeId.value = null
-  selectedEdgeId.value = null
-}
-
-// ============================================
-// WEBSOCKET SETUP
+// 4. WEBSOCKET SETUP
 // ============================================
 function setupWebSocket() {
-  console.log(' Đang kết nối WebSocket...')
+  if (socket) return // Tránh tạo trùng lặp
+
+  console.log(`🔌 Connecting to WebSocket at ${SOCKET_URL}...`)
   
   socket = io(SOCKET_URL, {
-    transports: ['websocket', 'polling'],  //  Thử websocket trước
-    reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionAttempts: 5
+    transports: ['websocket', 'polling'],
+    reconnection: false // Tắt tự động reconnect của lib để tự quản lý logic
   })
 
-  // Nhận trạng thái ban đầu
-  socket.on('initial_state', (data) => {
-    console.log(' Nhận initial_state từ Backend')
-    networkData.value = data
-    isLoading.value = false
+  socket.on('connect', () => {
+    console.log('✅ WebSocket Connected!')
     connectionStatus.value = 'connected'
     errorMessage.value = null
+    retryCount.value = 0
   })
 
-  // Lắng nghe cập nhật Host
+  socket.on('initial_state', (data) => {
+    networkData.value = data
+    isLoading.value = false
+  })
+
+  // --- SỬ DỤNG BATCH UPDATE CHO CÁC SỰ KIỆN ---
   socket.on('host_updated', (updatedHost) => {
-    if (!networkData.value) return
-    console.log('Host updated:', updatedHost.name)
-
-    const index = networkData.value.graph_data.nodes.findIndex(
-      n => n.id === updatedHost.name && n.group.startsWith('host')
-    )
-    
-    if (index !== -1) {
-      const oldNode = networkData.value.graph_data.nodes[index]
-      networkData.value.graph_data.nodes[index] = {
-        ...oldNode,
-        details: updatedHost
-      }
-    }
+    queueUpdate('node', updatedHost)
   })
 
-  // Lắng nghe cập nhật Switch
   socket.on('switch_updated', (updatedSwitch) => {
-    if (!networkData.value) return
-    console.log(' Switch updated:', updatedSwitch.name)
-
-    const index = networkData.value.graph_data.nodes.findIndex(
-      n => n.id === updatedSwitch.name && n.group.startsWith('switch')
-    )
-    
-    if (index !== -1) {
-      const oldNode = networkData.value.graph_data.nodes[index]
-      networkData.value.graph_data.nodes[index] = {
-        ...oldNode,
-        details: updatedSwitch
-      }
-    }
+    queueUpdate('node', updatedSwitch)
   })
 
-  // Lắng nghe cập nhật Link
   socket.on('link_updated', (updatedLink) => {
-    if (!networkData.value) return
-    console.log('Link updated:', updatedLink.id)
+    queueUpdate('link', updatedLink)
+  })
+
+  // --- XỬ LÝ LỖI VÀ RETRY ---
+  socket.on('connect_error', (error) => {
+    console.error('❌ Connection Error:', error.message)
+    connectionStatus.value = 'error'
     
-    const index = networkData.value.graph_data.edges.findIndex(
-      e => e.id === updatedLink.id
-    )
-    
-    if (index !== -1) {
-      const oldEdge = networkData.value.graph_data.edges[index]
-      networkData.value.graph_data.edges[index] = {
-        ...oldEdge,
-        label: `${updatedLink.current_throughput.toFixed(1)} Mbps`,
-        utilization: updatedLink.utilization,
-        status: updatedLink.status,
-        details: updatedLink
-      }
+    if (retryCount.value < MAX_RETRIES) {
+      const waitTime = 2000
+      retryCount.value++
+      errorMessage.value = `Connection lost. Retrying (${retryCount.value}/${MAX_RETRIES})...`
+      
+      console.log(`⏳ Waiting ${waitTime}ms before retry...`)
+      if (retryTimer) clearTimeout(retryTimer)
+      
+      retryTimer = setTimeout(() => {
+        if (socket) socket.connect()
+      }, waitTime)
+      
+    } else {
+      errorMessage.value = "❌ Unable to connect to Backend. Please check if the server is running."
+      isLoading.value = false
     }
   })
   
-  //  Xử lý kết nối thành công
-  socket.on('connect', () => {
-    console.log('WebSocket connected!')
-    connectionStatus.value = 'connected'
-    errorMessage.value = null
-  })
-
-  //  Xử lý mất kết nối
   socket.on('disconnect', (reason) => {
-    console.warn(' WebSocket disconnected:', reason)
+    if (reason === 'io server disconnect') {
+      // Disconnect do server đá -> cần connect lại thủ công
+      socket.connect();
+    }
     connectionStatus.value = 'error'
-    errorMessage.value = '🔌 Mất kết nối tới máy chủ real-time.'
-  })
-
-  // Xử lý lỗi kết nối
-  socket.on('connect_error', (error) => {
-    console.error('WebSocket error:', error.message)
-    connectionStatus.value = 'error'
-    errorMessage.value = `Không thể kết nối WebSocket: ${error.message}`
-    isLoading.value = false
   })
 }
 
 // ============================================
-// LIFECYCLE
+// 5. LIFECYCLE HOOKS
 // ============================================
-
 onMounted(async () => {
-  console.log(' Frontend đang khởi động...')
-  
+  // Check Health trước khi connect socket
   const isHealthy = await checkBackendHealth()
-  
   if (!isHealthy) {
-    errorMessage.value = "Backend chưa sẵn sàng. Đang thử lại sau 5s..."
-    setTimeout(() => {
-      onMounted() 
-    }, 5000)
+    errorMessage.value = "Backend is not reachable."
+    connectionStatus.value = 'error'
+    isLoading.value = false
+    return
   }
-
-  //  Khởi tạo WebSocket
+  
   setupWebSocket()
 })
 
 onUnmounted(() => {
+  // Dọn dẹp sạch sẽ khi thoát
   if (socket) {
-    console.log('🔌 Đang ngắt kết nối WebSocket...')
+    console.log('🛑 Disconnecting socket...')
     socket.disconnect()
+    socket = null
   }
+  if (updateTimer) clearTimeout(updateTimer)
+  if (retryTimer) clearTimeout(retryTimer)
 })
+
+// Events từ Component con
+function handleNodeSelected(nodeId) {
+  selectedNodeId.value = nodeId; selectedEdgeId.value = null
+}
+function handleEdgeSelected(edgeId) {
+  selectedEdgeId.value = edgeId; selectedNodeId.value = null
+}
+function handleSelectionCleared() {
+  selectedNodeId.value = null; selectedEdgeId.value = null
+}
 </script>
 
 <template>
@@ -258,7 +278,6 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
-
 <style>
 
 body, html {
