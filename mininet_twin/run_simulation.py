@@ -13,15 +13,19 @@ import requests
 # --- CẤU HÌNH ---
 API_BASE_URL = "http://localhost:5000/api"
 SOCKET_URL = "http://localhost:5000"
-SYNC_INTERVAL = 1.0  # Tăng nhẹ lên 1s để dễ nhìn log (0.5s hơi nhanh quá nếu debug)
+SYNC_INTERVAL = 0.5  # Tăng nhẹ lên 1s để dễ nhìn log (0.5s hơi nhanh quá nếu debug)
 
-# --- LOGGING ---
-# Định dạng log rõ ràng hơn
+os.makedirs("logs", exist_ok=True)  # Tạo thư mục logs nếu chưa có
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s | %(levelname)-8s | %(message)s',
-    datefmt='%H:%M:%S'
+    format='%(asctime)s [%(levelname)-8s] %(message)s',
+    handlers=[
+        logging.FileHandler("logs/mininet.log", encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
+
 logger = logging.getLogger()
 
 # --- SOCKET.IO CLIENT ---
