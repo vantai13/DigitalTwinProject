@@ -1,7 +1,7 @@
 from datetime import datetime
 class Host:
 
-    HIGH_CPU_THRESHOLD = 90.0  # ngưỡng CPU cao (%)
+    HIGH_CPU_THRESHOLD = 90.0  
 
     def __init__(self, name, ip_address, mac_address):
         """

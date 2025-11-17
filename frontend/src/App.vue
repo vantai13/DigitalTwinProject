@@ -19,7 +19,7 @@ const connectionStatus = ref('connecting') // 'connecting', 'connected', 'error'
 const retryCount = ref(0)
 const maxRetries = 3
 
-// ✅ SỬA LỖI: Khai báo socket NGOÀI onMounted
+// Khai báo socket NGOÀI onMounted
 let socket = null
 
 // ============================================
@@ -33,10 +33,10 @@ async function checkBackendHealth() {
     const response = await axios.get(`${API_BASE_URL}/health`, {
       timeout: 2000
     })
-    console.log('✅ Backend health:', response.data)
+    console.log('Backend health:', response.data)
     return true
   } catch (error) {
-    console.error('❌ Backend không phản hồi:', error.message)
+    console.error(' Backend không phản hồi:', error.message)
     return false
   }
 }
@@ -47,7 +47,7 @@ function retryConnection() {
   connectionStatus.value = 'connecting'
   isLoading.value = true
   
-  // ✅ Reconnect socket
+  // econnect socket
   if (socket) {
     socket.disconnect()
     socket.connect()
@@ -76,28 +76,28 @@ function handleSelectionCleared() {
 // WEBSOCKET SETUP
 // ============================================
 function setupWebSocket() {
-  console.log('🔌 Đang kết nối WebSocket...')
+  console.log(' Đang kết nối WebSocket...')
   
   socket = io(SOCKET_URL, {
-    transports: ['websocket', 'polling'],  // ✅ Thử websocket trước
+    transports: ['websocket', 'polling'],  //  Thử websocket trước
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionAttempts: 5
   })
 
-  // 1. ✅ Nhận trạng thái ban đầu
+  // Nhận trạng thái ban đầu
   socket.on('initial_state', (data) => {
-    console.log('✅ Nhận initial_state từ Backend')
+    console.log(' Nhận initial_state từ Backend')
     networkData.value = data
     isLoading.value = false
     connectionStatus.value = 'connected'
     errorMessage.value = null
   })
 
-  // 2. ✅ Lắng nghe cập nhật Host
+  // Lắng nghe cập nhật Host
   socket.on('host_updated', (updatedHost) => {
     if (!networkData.value) return
-    console.log('🔄 Host updated:', updatedHost.name)
+    console.log('Host updated:', updatedHost.name)
 
     const index = networkData.value.graph_data.nodes.findIndex(
       n => n.id === updatedHost.name && n.group.startsWith('host')
@@ -112,10 +112,10 @@ function setupWebSocket() {
     }
   })
 
-  // 3. ✅ Lắng nghe cập nhật Switch
+  // Lắng nghe cập nhật Switch
   socket.on('switch_updated', (updatedSwitch) => {
     if (!networkData.value) return
-    console.log('🔄 Switch updated:', updatedSwitch.name)
+    console.log(' Switch updated:', updatedSwitch.name)
 
     const index = networkData.value.graph_data.nodes.findIndex(
       n => n.id === updatedSwitch.name && n.group.startsWith('switch')
@@ -130,10 +130,10 @@ function setupWebSocket() {
     }
   })
 
-  // 4. ✅ Lắng nghe cập nhật Link
+  // Lắng nghe cập nhật Link
   socket.on('link_updated', (updatedLink) => {
     if (!networkData.value) return
-    console.log('🔄 Link updated:', updatedLink.id)
+    console.log('Link updated:', updatedLink.id)
     
     const index = networkData.value.graph_data.edges.findIndex(
       e => e.id === updatedLink.id
@@ -151,25 +151,25 @@ function setupWebSocket() {
     }
   })
   
-  // 5. ✅ Xử lý kết nối thành công
+  //  Xử lý kết nối thành công
   socket.on('connect', () => {
-    console.log('✅ WebSocket connected!')
+    console.log('WebSocket connected!')
     connectionStatus.value = 'connected'
     errorMessage.value = null
   })
 
-  // 6. ✅ Xử lý mất kết nối
+  //  Xử lý mất kết nối
   socket.on('disconnect', (reason) => {
-    console.warn('❌ WebSocket disconnected:', reason)
+    console.warn(' WebSocket disconnected:', reason)
     connectionStatus.value = 'error'
     errorMessage.value = '🔌 Mất kết nối tới máy chủ real-time.'
   })
 
-  // 7. ✅ Xử lý lỗi kết nối
+  // Xử lý lỗi kết nối
   socket.on('connect_error', (error) => {
-    console.error('❌ WebSocket error:', error.message)
+    console.error('WebSocket error:', error.message)
     connectionStatus.value = 'error'
-    errorMessage.value = `🔴 Không thể kết nối WebSocket: ${error.message}`
+    errorMessage.value = `Không thể kết nối WebSocket: ${error.message}`
     isLoading.value = false
   })
 }
@@ -177,19 +177,20 @@ function setupWebSocket() {
 // ============================================
 // LIFECYCLE
 // ============================================
+
 onMounted(async () => {
-  console.log('🚀 Frontend đang khởi động...')
+  console.log(' Frontend đang khởi động...')
   
   const isHealthy = await checkBackendHealth()
   
   if (!isHealthy) {
-    errorMessage.value = "🔴 Backend Flask chưa chạy hoặc chưa sẵn sàng"
-    connectionStatus.value = 'error'
-    isLoading.value = false
-    return
+    errorMessage.value = "Backend chưa sẵn sàng. Đang thử lại sau 5s..."
+    setTimeout(() => {
+      onMounted() 
+    }, 5000)
   }
 
-  // ✅ Khởi tạo WebSocket
+  //  Khởi tạo WebSocket
   setupWebSocket()
 })
 
@@ -229,7 +230,7 @@ onUnmounted(() => {
 
     <!-- ERROR STATE -->
     <div v-if="errorMessage && connectionStatus === 'error'" class="error-container">
-      <div class="error-icon">⚠️</div>
+      <div class="error-icon"><img src="./assets/icons/alert-triangle.svg" alt=""></div>
       <h2>Không thể kết nối</h2>
       <p class="error-message">{{ errorMessage }}</p>
       
@@ -244,7 +245,7 @@ onUnmounted(() => {
       </div>
       
       <button class="retry-button" @click="retryConnection">
-        🔄 Thử lại
+         Thử lại
       </button>
     </div>
 
@@ -259,7 +260,7 @@ onUnmounted(() => {
 </template>
 
 <style>
-/* (Giữ nguyên CSS như cũ) */
+
 body, html {
   margin: 0;
   padding: 0;

@@ -21,3 +21,9 @@ dist/
 *.log
 *.sqlite3
 .idea/
+
+# ====== Database & Logs ======
+*.sqlite3
+*.db
+logs/               # TỐT NHẤT: cả thư mục logs không đẩy lên Git
+*.log

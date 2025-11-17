@@ -20,7 +20,7 @@ class Link:
 
         self.last_update_time = None
         
-        # Đây là các số liệu hiệu năng (performance metrics)
+        # số liệu hiệu năng (performance metrics)
         # mà chúng ta muốn đồng bộ hóa từ Mininet ( dùng iPerf).
         self.current_throughput = 0.0  # (Mbps) - Băng thông đang sử dụng
         self.latency = 0.0             # (ms) - Độ trễ
