@@ -5,16 +5,11 @@ import collector
 def collect_link_metrics(net, link_byte_counters, sync_interval):
     """
     Thu thập metrics cho tất cả các Link TRÊN CẠNH (edge links) của mạng.
-    
-     không đo switch-switch. Chúng ta đo host-switch,
-    vì đó là nơi duy nhất có thể đọc /proc/net/dev để thấy traffic.
-    
-    Trả về một dictionary: { "link_id": throughput_mbps }
     """
     
     link_metrics = {}
     
-    # Lặp qua các Host, vì đó là nơi đo được
+    
     for host in net.hosts:
         # host.intfs là một dictionary, ví dụ { 0: h1-eth0 }
         # Lấy interface đầu tiên (không phải 'lo')

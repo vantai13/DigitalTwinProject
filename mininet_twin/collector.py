@@ -4,34 +4,18 @@ import random
 def get_host_cpu_usage(host):
     """
     Lấy % CPU sử dụng cho Mininet host.
-    
-    QUAN TRỌNG: Mininet host là network namespace, KHÔNG phải VM riêng.
-    → Không có CPU riêng → Phải dùng dữ liệu giả lập (simulated)
-    
-    Trong production thật, bạn cần dùng cgroup hoặc monitor process thực tế.
     """
     try:
-        # Cách 1: Dùng vmstat (chính xác nhưng chậm 1s)
-        # cmd = "vmstat 1 2 | tail -1 | awk '{print 100 - $15}'"
-        
-        # Cách 2: Đọc /proc/stat (nhanh hơn nhưng cần 2 lần đọc để tính delta)
-        # Vì Mininet host share kernel với máy host → CPU stats không chính xác
-        
-        # GIẢI PHÁP TẠM THỜI: Giả lập CPU dựa trên traffic
-        # Lấy số lượng process đang chạy (để tạo biến động)
-        ps_output = host.cmd("ps aux | wc -l")
-        num_processes = int(ps_output.strip())
-        
-        # Tạo CPU giả lập: 5-15% baseline + noise
-        base_cpu = min(15, num_processes * 0.5)  # Mỗi process = 0.5% CPU
-        cpu_usage = base_cpu + random.uniform(-3, 8)
-        cpu_usage = max(0, min(100, cpu_usage))  # Clamp 0-100
-        
-        return round(cpu_usage, 2)
-        
-    except Exception as e:
-        print(f"[Lỗi] get_host_cpu_usage({host.name}): {e}")
-        return 5.0  # Fallback: 5% CPU
+        ps_output = host.cmd("ps aux | wc -l").strip()
+        num_processes = int(ps_output) if ps_output.isdigit() else 0
+    except Exception:
+        num_processes = 0
+
+    base_cpu = min(15, num_processes * 0.5)
+    cpu_usage = base_cpu + random.uniform(-3, 8)
+    cpu_usage = max(0, min(100, cpu_usage))
+    
+    return round(cpu_usage, 2)
 
 def get_host_memory_usage(host):
     """

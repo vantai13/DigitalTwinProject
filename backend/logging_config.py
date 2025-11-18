@@ -7,37 +7,23 @@ import os
 import sys
 
 def get_logger():
-    os.makedirs("logs", exist_ok=True)
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-    # Logger cố định cho toàn bộ backend
-    logger = logging.getLogger("digital_twin_backend")
-    logger.setLevel(logging.INFO)
+    LOG_DIR = os.path.join(BASE_DIR, "logs")
+    os.makedirs(LOG_DIR, exist_ok=True)
 
-    # Nếu đã có handler rồi (khi reload module) → không tạo lại
-    if logger.handlers:
-        return logger
+    LOG_FILE = os.path.join(LOG_DIR, "backend.log")
 
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)-8s] %(message)s',
+        handlers=[
+            logging.FileHandler(LOG_FILE, encoding='utf-8'),
+            logging.StreamHandler(sys.stdout)
+        ]
     )
 
-    # ───── File handler (rotating) ─────
-    file_handler = RotatingFileHandler(
-        "logs/backend.log",
-        maxBytes=10 * 1024 * 1024,   # 10 MB
-        backupCount=5,
-        encoding="utf-8",
-    )
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-
-    # ───── Console handler ─────
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
-    # Không cho log lan lên root (tránh in 2 lần)
-    logger.propagate = False
+    logger = logging.getLogger(__name__)
 
     # Test ngay khi khởi tạo
     logger.info("=== BACKEND LOGGER ĐÃ KHỞI TẠO THÀNH CÔNG ===")

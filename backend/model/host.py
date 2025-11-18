@@ -26,8 +26,6 @@ class Host:
         self.tx_bytes = 0  # (Tổng số bytes đã gửi)
         self.rx_bytes = 0  # (Tổng số bytes đã nhận)
 
-        
-
     def set_status(self, new_status):
         if new_status in ['up', 'unknown', 'offline', 'high-load']:
             self.status = new_status

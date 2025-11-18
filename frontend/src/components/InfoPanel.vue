@@ -100,7 +100,6 @@ const selectedEdgeDetails = computed(() => {
 </script>
 
 <style scoped>
-/* (Toàn bộ CSS của InfoPanel.vue ở đây) */
 .info-panel {
   width: 350px;
   flex-shrink: 0;

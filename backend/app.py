@@ -22,28 +22,8 @@ except ImportError as e:
     print(f"Lỗi nghiêm trọng: Không thể import các lớp Model: {e}")
     sys.exit(1)
 
-# ============================================
-# CẤU HÌNH LOGGING (Thay thế hoàn toàn print)
-# ============================================
-# Tạo thư mục logs nếu chưa tồn tại
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Trỏ đến thư mục logs nằm ngoài backend
-LOG_DIR = os.path.join(BASE_DIR, "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
-
-LOG_FILE = os.path.join(LOG_DIR, "backend.log")
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)-8s] %(message)s',
-    handlers=[
-        logging.FileHandler(LOG_FILE, encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
-logger = logging.getLogger(__name__)
+logger = get_logger()
 
 # ============================================
 # KHỞI TẠO FLASK VÀ SOCKETIO
@@ -277,13 +257,13 @@ def handle_mininet_telemetry(data):
     }
     """
     with data_lock:
-        # 1. Cập nhật Hosts
+        
         for h_data in data.get('hosts', []):
             host = digital_twin.get_host(h_data['name'])
             if host:
                 host.update_resource_metrics(h_data['cpu'], h_data['mem'])
 
-        # 2. Cập nhật Links vào Model
+        
         for l_data in data.get('links', []):
             parts = l_data['id'].split('-')
             if len(parts) == 2:
@@ -292,7 +272,7 @@ def handle_mininet_telemetry(data):
                     # 0 là latency (tạm thời)
                     link.update_performance_metrics(l_data['bw'], 0) 
 
-        # 3. Cập nhật Switches (Heartbeat)
+        #  Cập nhật Switches (Heartbeat)
         for s_name in data.get('switches', []):
             switch = digital_twin.get_switch(s_name)
             if switch:
@@ -300,7 +280,7 @@ def handle_mininet_telemetry(data):
         
     socketio.emit('network_batch_update', data)
 
-    # (Tùy chọn) In log nhẹ để biết đang nhận tin
+    
     logger.info(f"Đã nhận telemetry từ Mininet: {len(data['hosts'])} hosts")
 
 # ============================================

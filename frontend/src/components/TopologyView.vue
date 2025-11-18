@@ -15,10 +15,10 @@ import iconSwitch from '@/assets/icons/switch.png'
 const props = defineProps(['graphData'])
 const emit = defineEmits(['node-selected', 'edge-selected', 'selection-cleared'])
 
-const networkContainer = ref(null)
-const networkInstance = ref(null)
+const networkContainer = ref(null) // div chứa sơ đồ
+const networkInstance = ref(null) // đối tượng vis-network
 
-// [FIXED] Dùng computed để trigger re-render
+//  Dùng computed để trigger re-render
 const graphDataString = computed(() => JSON.stringify(props.graphData))
 
 function processEdges(edges) {
@@ -155,7 +155,7 @@ function initializeNetwork() {
   const processedEdges = processEdges(props.graphData.edges)
   const processedNodes = processNodes(props.graphData.nodes)
 
-  console.log('🎨 Initializing network with:', {
+  console.log(' Initializing network with:', {
     nodes: processedNodes.length,
     edges: processedEdges.length
   })
@@ -311,9 +311,9 @@ function initializeNetwork() {
       }
     })
 
-    console.log("✅ Vis.js network initialized")
+    console.log("Vis.js network initialized")
   } catch (error) {
-    console.error("❌ Error initializing Vis.js:", error)
+    console.error(" Error initializing Vis.js:", error)
   }
 }
 
@@ -321,10 +321,10 @@ onMounted(() => {
   initializeNetwork()
 })
 
-// [FIXED] Watch graphDataString thay vì graphData
+//  Watch graphDataString
 watch(graphDataString, (newVal, oldVal) => {
   if (newVal !== oldVal && networkInstance.value) {
-    console.log('🔄 Updating network visualization...')
+    console.log(' Updating network visualization...')
     
     const processedEdges = processEdges(props.graphData.edges)
     const processedNodes = processNodes(props.graphData.nodes)
@@ -333,7 +333,7 @@ watch(graphDataString, (newVal, oldVal) => {
       networkInstance.value.body.data.nodes.update(processedNodes)
       networkInstance.value.body.data.edges.update(processedEdges)
     } catch (error) {
-      console.error('❌ Error updating network:', error)
+      console.error(' Error updating network:', error)
     }
   }
 })
