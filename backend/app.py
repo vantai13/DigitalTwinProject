@@ -307,35 +307,36 @@ def check_device_status_loop():
     while True:
         try:
             time.sleep(5) 
-            now = datetime.now()
-            timeout_threshold = timedelta(seconds=TIMEOUT_SECONDS)
+            with data_lock:
+                now = datetime.now()
+                timeout_threshold = timedelta(seconds=TIMEOUT_SECONDS)
 
-            # Kiểm tra Hosts
-            for host in digital_twin.hosts.values():
-                if host.last_update_time:
-                    if (now - host.last_update_time) > timeout_threshold:
-                        if host.status != 'offline':
-                            logger.warning(f"[Reaper] Host {host.name} timeout → OFFLINE")
-                            host.set_status('offline')
-                            broadcast_host_update(host)
+                # Kiểm tra Hosts
+                for host in digital_twin.hosts.values():
+                    if host.last_update_time:
+                        if (now - host.last_update_time) > timeout_threshold:
+                            if host.status != 'offline':
+                                logger.warning(f"[Reaper] Host {host.name} timeout → OFFLINE")
+                                host.set_status('offline')
+                                broadcast_host_update(host)
 
-            # Kiểm tra Switches
-            for switch in digital_twin.switches.values():
-                if switch.last_update_time:
-                    if (now - switch.last_update_time) > timeout_threshold:
-                        if switch.status != 'offline':
-                            logger.warning(f"[Reaper] Switch {switch.name} timeout → OFFLINE")
-                            switch.set_status('offline')
-                            broadcast_switch_update(switch)
+                # Kiểm tra Switches
+                for switch in digital_twin.switches.values():
+                    if switch.last_update_time:
+                        if (now - switch.last_update_time) > timeout_threshold:
+                            if switch.status != 'offline':
+                                logger.warning(f"[Reaper] Switch {switch.name} timeout → OFFLINE")
+                                switch.set_status('offline')
+                                broadcast_switch_update(switch)
 
-            # Kiểm tra Links
-            for link in digital_twin.links.values():
-                if link.last_update_time:
-                    if (now - link.last_update_time) > timeout_threshold:
-                        if link.status != 'down':
-                            logger.warning(f"[Reaper] Link {link.id} timeout → DOWN")
-                            link.set_status('down')
-                            broadcast_link_update(link)
+                # Kiểm tra Links
+                for link in digital_twin.links.values():
+                    if link.last_update_time:
+                        if (now - link.last_update_time) > timeout_threshold:
+                            if link.status != 'down':
+                                logger.warning(f"[Reaper] Link {link.id} timeout → DOWN")
+                                link.set_status('down')
+                                broadcast_link_update(link)
 
         except Exception as e:
             logger.error(f"[Reaper Lỗi] {e}")
@@ -362,6 +363,6 @@ if __name__ == '__main__':
         app,
         host='0.0.0.0',
         port=5000,
-        debug=True,
+        debug=False,
         allow_unsafe_werkzeug=True
     )

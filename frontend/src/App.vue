@@ -166,6 +166,45 @@ function setupWebSocket() {
 
     lastUpdateTime.value = new Date().toISOString()
   })
+
+
+  // =============================================
+  // 3. QUAN TRỌNG NHẤT: LẮNG NGHE REAPER THREAD
+  // =============================================
+  socket.on('host_updated', (hostData) => {
+    if (!networkData.value) return
+    const node = networkData.value.graph_data.nodes.find(n => n.id === hostData.name)
+    if (node) {
+      Object.assign(node.details, hostData)
+      if (hostData.status === 'offline') {
+        node.group = 'host-offline'
+      } else if (node.group === 'host-offline') {
+        node.group = 'host'
+      }
+      lastUpdateTime.value = new Date().toISOString()
+    }
+  })
+
+  socket.on('switch_updated', (switchData) => {
+    if (!networkData.value) return
+    const node = networkData.value.graph_data.nodes.find(n => n.id === switchData.name)
+    if (node) {
+      Object.assign(node.details, switchData)
+      node.group = switchData.status === 'offline' ? 'switch-offline' : 'switch'
+      lastUpdateTime.value = new Date().toISOString()
+    }
+  })
+
+  socket.on('link_updated', (linkData) => {
+    if (!networkData.value) return
+    const edge = networkData.value.graph_data.edges.find(e => e.id === linkData.id)
+    if (edge) {
+      Object.assign(edge.details, linkData)
+      edge.group = linkData.status === 'down' ? 'link-down' : 'link'
+      edge.label = linkData.status === 'down' ? 'DOWN' : edge.label
+      lastUpdateTime.value = new Date().toISOString()
+    }
+  })
   
   socket.on('disconnect', (reason) => {
     console.warn('⚠️ WebSocket disconnected:', reason)
