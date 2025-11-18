@@ -8,9 +8,8 @@ import TopologyView from './components/TopologyView.vue'
 import InfoPanel from './components/InfoPanel.vue'
 
 // ============================================
-// 1. CONFIGURATION (ENV VARIABLES)
+// 1. CONFIGURATION
 // ============================================
-// Tự động lấy từ file .env hoặc dùng mặc định nếu đang dev
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'
 
@@ -22,19 +21,10 @@ const isLoading = ref(true)
 const errorMessage = ref(null)
 const selectedNodeId = ref(null)
 const selectedEdgeId = ref(null)
-const connectionStatus = ref('connecting') 
+const connectionStatus = ref('connecting')
+const lastUpdateTime = ref(new Date().toISOString())
 
-// Retry Logic
-const retryCount = ref(0)
-const MAX_RETRIES = 3
-let retryTimer = null
-
-// Socket Instance (Khai báo ở phạm vi Module để truy cập toàn cục trong file)
 let socket = null
-
-// Batch Update Queue (Hàng đợi cập nhật)
-let updateQueue = []
-let updateTimer = null
 
 // ============================================
 // 3. HELPER FUNCTIONS
@@ -43,65 +33,15 @@ let updateTimer = null
 async function checkBackendHealth() {
   try {
     const response = await axios.get(`${API_BASE_URL}/health`, { timeout: 2000 })
-    console.log('Backend health:', response.data)
+    console.log('✅ Backend health:', response.data)
     return true
   } catch (error) {
-    console.error(' Backend check failed:', error.message)
+    console.error('❌ Backend check failed:', error.message)
     return false
   }
 }
 
-// Hàm xử lý Batch Update (Tư duy người bồi bàn)
-function processUpdateQueue() {
-  if (!networkData.value || updateQueue.length === 0) return
-
-  // Lặp qua hàng đợi và cập nhật dữ liệu
-  // Việc này diễn ra rất nhanh trong bộ nhớ JS
-  updateQueue.forEach(item => {
-    const { type, data } = item
-    
-    if (type === 'node') {
-      // Tìm và cập nhật Node (Host/Switch)
-      const index = networkData.value.graph_data.nodes.findIndex(n => n.id === data.name)
-      if (index !== -1) {
-        // Giữ nguyên vị trí cũ, chỉ update details
-        const oldNode = networkData.value.graph_data.nodes[index]
-        networkData.value.graph_data.nodes[index] = { ...oldNode, details: data }
-      }
-    } else if (type === 'link') {
-      // Tìm và cập nhật Link
-      const index = networkData.value.graph_data.edges.findIndex(e => e.id === data.id)
-      if (index !== -1) {
-        const oldEdge = networkData.value.graph_data.edges[index]
-        networkData.value.graph_data.edges[index] = {
-          ...oldEdge,
-          label: `${data.current_throughput.toFixed(1)} Mbps`,
-          utilization: data.utilization,
-          status: data.status,
-          details: data
-        }
-      }
-    }
-  })
-
-  // Dọn sạch hàng đợi
-  updateQueue = []
-  // Vue sẽ tự động gom các thay đổi trong networkData thành 1 lần re-render DOM
-}
-
-// Hàm helper để đẩy vào hàng đợi
-function queueUpdate(type, data) {
-  updateQueue.push({ type, data })
-  
-  // Reset timer cũ
-  if (updateTimer) clearTimeout(updateTimer)
-  
-  // Đợi 50ms, nếu không có gì thêm mới chạy processUpdateQueue
-  updateTimer = setTimeout(processUpdateQueue, 50)
-}
-
 function retryConnection() {
-  retryCount.value = 0
   errorMessage.value = null
   connectionStatus.value = 'connecting'
   isLoading.value = true
@@ -114,66 +54,133 @@ function retryConnection() {
 }
 
 // ============================================
-// 4. WEBSOCKET SETUP
+// 4. WEBSOCKET SETUP (FIXED)
 // ============================================
 function setupWebSocket() {
-  if (socket) return // Tránh tạo trùng lặp
+  if (socket) return
 
   console.log(`🔌 Connecting to WebSocket at ${SOCKET_URL}...`)
   
   socket = io(SOCKET_URL, {
     transports: ['websocket', 'polling'],
-    reconnection: false // Tắt tự động reconnect của lib để tự quản lý logic
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000
   })
 
   socket.on('connect', () => {
-    console.log(' WebSocket Connected!')
+    console.log('✅ WebSocket Connected!')
     connectionStatus.value = 'connected'
     errorMessage.value = null
-    retryCount.value = 0
   })
 
+  // [FIXED] Nhận topology ban đầu
   socket.on('initial_state', (data) => {
+    console.log('📦 Received initial topology:', data)
     networkData.value = data
     isLoading.value = false
+    lastUpdateTime.value = new Date().toISOString()
   })
 
-  // [SỬA] Lắng nghe sự kiện BATCH thay vì sự kiện lẻ
+  // [FIXED] Xử lý batch update từ Mininet
   socket.on('network_batch_update', (batchData) => {
-    if (!networkData.value) return;
+    if (!networkData.value) {
+      console.warn('⚠️ NetworkData chưa khởi tạo, bỏ qua batch update')
+      return
+    }
+
+    console.log('🔄 Processing batch update:', {
+      hosts: batchData.hosts?.length || 0,
+      links: batchData.links?.length || 0,
+      switches: batchData.switches?.length || 0
+    })
 
     // 1. Cập nhật Hosts
-    if (batchData.hosts) {
+    if (batchData.hosts && Array.isArray(batchData.hosts)) {
       batchData.hosts.forEach(hData => {
-        const node = networkData.value.graph_data.nodes.find(n => n.id === hData.name);
-        if (node) {
-           // Merge dữ liệu mới vào details cũ
-           node.details = { ...node.details, cpu_utilization: hData.cpu, memory_usage: hData.mem, status: 'up' };
-           // Logic đổi màu node nếu cần thiết có thể xử lý ở đây hoặc trong TopologyView dựa trên details
+        const nodeIndex = networkData.value.graph_data.nodes.findIndex(
+          n => n.id === hData.name
+        )
+        
+        if (nodeIndex !== -1) {
+          const node = networkData.value.graph_data.nodes[nodeIndex]
+          
+          // Merge dữ liệu mới
+          node.details = {
+            ...node.details,
+            cpu_utilization: hData.cpu,
+            memory_usage: hData.mem,
+            status: hData.cpu > 90 ? 'high-load' : 'up'
+          }
+          
+          // Cập nhật group để đổi màu node
+          if (hData.cpu > 90) {
+            node.group = 'host-high-load'
+          } else {
+            node.group = 'host'
+          }
         }
-      });
+      })
     }
 
     // 2. Cập nhật Links
-    if (batchData.links) {
+    if (batchData.links && Array.isArray(batchData.links)) {
       batchData.links.forEach(lData => {
-        const edge = networkData.value.graph_data.edges.find(e => e.id === lData.id);
-        if (edge) {
-           edge.label = `${lData.bw.toFixed(1)} Mbps`;
-           edge.utilization = (lData.bw / edge.details.bandwidth_capacity) * 100; // Tính lại %
-           edge.status = 'up';
-           edge.details.current_throughput = lData.bw;
+        const edgeIndex = networkData.value.graph_data.edges.findIndex(
+          e => e.id === lData.id
+        )
+        
+        if (edgeIndex !== -1) {
+          const edge = networkData.value.graph_data.edges[edgeIndex]
+          const bandwidth = edge.details?.bandwidth_capacity || 100
+          const utilization = (lData.bw / bandwidth) * 100
+          
+          edge.label = `${lData.bw.toFixed(1)} Mbps`
+          edge.utilization = utilization
+          edge.status = 'up'
+          
+          if (edge.details) {
+            edge.details.current_throughput = lData.bw
+            edge.details.utilization = utilization
+          }
         }
-      });
+      })
     }
+
+    // 3. Cập nhật Switches (Heartbeat)
+    if (batchData.switches && Array.isArray(batchData.switches)) {
+      batchData.switches.forEach(sName => {
+        const nodeIndex = networkData.value.graph_data.nodes.findIndex(
+          n => n.id === sName
+        )
+        
+        if (nodeIndex !== -1) {
+          const node = networkData.value.graph_data.nodes[nodeIndex]
+          if (node.details) {
+            node.details.status = 'up'
+          }
+          node.group = 'switch'
+        }
+      })
+    }
+
+    lastUpdateTime.value = new Date().toISOString()
   })
   
   socket.on('disconnect', (reason) => {
-    if (reason === 'io server disconnect') {
-      // Disconnect do server đá -> cần connect lại thủ công
-      socket.connect();
-    }
+    console.warn('⚠️ WebSocket disconnected:', reason)
     connectionStatus.value = 'error'
+    
+    if (reason === 'io server disconnect') {
+      socket.connect()
+    }
+  })
+
+  socket.on('connect_error', (error) => {
+    console.error('❌ Connection error:', error)
+    errorMessage.value = `Connection failed: ${error.message}`
+    connectionStatus.value = 'error'
+    isLoading.value = false
   })
 }
 
@@ -181,10 +188,9 @@ function setupWebSocket() {
 // 5. LIFECYCLE HOOKS
 // ============================================
 onMounted(async () => {
-  // Check Health trước khi connect socket
   const isHealthy = await checkBackendHealth()
   if (!isHealthy) {
-    errorMessage.value = "Backend is not reachable."
+    errorMessage.value = "Backend is not reachable. Make sure Flask is running on port 5000."
     connectionStatus.value = 'error'
     isLoading.value = false
     return
@@ -194,31 +200,33 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  // Dọn dẹp sạch sẽ khi thoát
   if (socket) {
-    console.log(' Disconnecting socket...')
+    console.log('🔌 Disconnecting socket...')
     socket.disconnect()
     socket = null
   }
-  if (updateTimer) clearTimeout(updateTimer)
-  if (retryTimer) clearTimeout(retryTimer)
 })
 
 // Events từ Component con
 function handleNodeSelected(nodeId) {
-  selectedNodeId.value = nodeId; selectedEdgeId.value = null
+  selectedNodeId.value = nodeId
+  selectedEdgeId.value = null
 }
+
 function handleEdgeSelected(edgeId) {
-  selectedEdgeId.value = edgeId; selectedNodeId.value = null
+  selectedEdgeId.value = edgeId
+  selectedNodeId.value = null
 }
+
 function handleSelectionCleared() {
-  selectedNodeId.value = null; selectedEdgeId.value = null
+  selectedNodeId.value = null
+  selectedEdgeId.value = null
 }
 </script>
 
 <template>
   <div class="app-container">
-    <Header />
+    <Header :lastUpdate="lastUpdateTime" />
 
     <!-- MAIN CONTENT -->
     <div v-if="networkData && connectionStatus === 'connected'" class="main-content">
@@ -244,12 +252,11 @@ function handleSelectionCleared() {
 
     <!-- ERROR STATE -->
     <div v-if="errorMessage && connectionStatus === 'error'" class="error-container">
-      <div class="error-icon"><img src="./assets/icons/alert-triangle.svg" alt=""></div>
+      <div class="error-icon">⚠️</div>
       <h2>Không thể kết nối</h2>
       <p class="error-message">{{ errorMessage }}</p>
       
       <div class="error-details">
-        <p><strong>Lần thử:</strong> {{ retryCount }} / {{ maxRetries }}</p>
         <p><strong>Hướng dẫn:</strong></p>
         <ul>
           <li>Kiểm tra Flask Backend đang chạy tại <code>localhost:5000</code></li>
@@ -259,7 +266,7 @@ function handleSelectionCleared() {
       </div>
       
       <button class="retry-button" @click="retryConnection">
-         Thử lại
+        🔄 Thử lại
       </button>
     </div>
 
@@ -272,8 +279,8 @@ function handleSelectionCleared() {
     </div>
   </div>
 </template>
-<style>
 
+<style>
 body, html {
   margin: 0;
   padding: 0;

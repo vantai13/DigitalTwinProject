@@ -6,13 +6,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { Network } from 'vis-network/standalone'
 import 'vis-network/styles/vis-network.css'
 import iconHost from '@/assets/icons/laptop.png'
 import iconSwitch from '@/assets/icons/switch.png'
-
-
 
 const props = defineProps(['graphData'])
 const emit = defineEmits(['node-selected', 'edge-selected', 'selection-cleared'])
@@ -20,78 +18,75 @@ const emit = defineEmits(['node-selected', 'edge-selected', 'selection-cleared']
 const networkContainer = ref(null)
 const networkInstance = ref(null)
 
+// [FIXED] Dùng computed để trigger re-render
+const graphDataString = computed(() => JSON.stringify(props.graphData))
+
 function processEdges(edges) {
   const highThreshold = 90
   const mediumThreshold = 70
 
   if (!Array.isArray(edges)) {
-    console.error("processEdges: Dữ liệu edges không phải là mảng", edges)
+    console.error("processEdges: edges không phải array", edges)
     return []
   }
 
   return edges.map(edge => {
-    let colorVal
-    let arrowsConfig = { to: { enabled: false } }
+    let colorVal = '#00F7F7'  // Default: cyan
     let isDashed = false
     let shadowConfig = { enabled: false }
+    let widthVal = 2.5
 
-    // Logic màu sắc
+    // Xác định màu dựa trên status và utilization
     if (edge.status === 'down') {
-      colorVal = '#475569'
+      colorVal = '#475569'  // Gray
       isDashed = true
+      widthVal = 1.5
     } else if (edge.utilization > highThreshold) {
-      colorVal = '#F60000'
+      colorVal = '#F60000'  // Red
+      widthVal = 4
+      shadowConfig = {
+        enabled: true,
+        color: 'rgba(246, 0, 0, 0.8)',
+        size: 25
+      }
     } else if (edge.utilization > mediumThreshold) {
-      colorVal = '#f97316'
-    } else {
-      colorVal = '#00F7F7'
+      colorVal = '#f97316'  // Orange
+      widthVal = 3.5
+      shadowConfig = {
+        enabled: true,
+        color: 'rgba(249, 115, 22, 0.6)',
+        size: 20
+      }
+    } else if (edge.utilization > 0) {
+      // Low traffic - cyan with glow
+      shadowConfig = {
+        enabled: true,
+        color: 'rgba(0, 247, 247, 0.5)',
+        size: 15
+      }
     }
 
-    // Animation lưu lượng
-    if (edge.status === 'up' && edge.utilization > 0) {
-      
-      let arrowSpeed = 1; // Tốc độ mặc định
-
-      // Chỉ cần tính tốc độ
-      if (edge.utilization > highThreshold) { // Tải cao
-        arrowSpeed = 1.5; // Nhanh
-      } else if (edge.utilization > mediumThreshold) { // Tải trung bình
-        arrowSpeed = 1.2; // Vừa
+    // Animation arrows (chỉ khi có traffic)
+    let arrowsConfig = { to: { enabled: false } }
+    if (edge.status === 'up' && edge.utilization > 1) {
+      let arrowSpeed = 1
+      if (edge.utilization > highThreshold) {
+        arrowSpeed = 2
+      } else if (edge.utilization > mediumThreshold) {
+        arrowSpeed = 1.5
       }
-      // Tải thấp sẽ giữ nguyên màu xanh/tốc độ 1
 
-      // Cấu hình mũi tên động của bạn
       arrowsConfig = {
         to: {
           enabled: true,
-
-          // BẮT BUỘC dùng lại 'moving-arrow' để nó di chuyển
-          type: 'moving-arrow',
-
-          // 1. Tinh chỉnh kích thước mũi tên
-          // scaleFactor: 1 là mặc định. 
-          // 1.2 là to hơn 20%. Bạn có thể thử 1.5 hoặc 2.0
-          scaleFactor: 1.2,
-
-          // 2. Tinh chỉnh tốc độ/tần suất
-          // 'length' vẫn hoạt động với 'moving-arrow'
-          // Số càng NHỎ, mũi tên càng GẦN NHAU và chạy càng NHANH.
-          length: 40 / arrowSpeed
+          type: 'arrow',
+          scaleFactor: 0.8,
+        },
+        middle: {
+          enabled: true,
+          type: 'arrow',
+          scaleFactor: 0.6
         }
-      }
-    }
-
-
-
-
-    // Glow cho link up
-    if (edge.status !== 'down') {
-      shadowConfig = {
-        enabled: true,
-        color: colorVal,
-        size: 20,
-        x: 0,
-        y: 0
       }
     }
 
@@ -102,20 +97,28 @@ function processEdges(edges) {
         highlight: colorVal,
         hover: colorVal
       },
-      width: 2.5,
+      width: widthVal,
       arrows: arrowsConfig,
       dashes: isDashed,
       smooth: {
-        type: 'continuous'
+        type: 'continuous',
+        roundness: 0.5
       },
-      shadow: shadowConfig
+      shadow: shadowConfig,
+      font: {
+        color: '#00F7F7',
+        size: 11,
+        align: 'middle',
+        strokeWidth: 3,
+        strokeColor: '#0f172a'
+      }
     }
   })
 }
 
 function processNodes(nodes) {
   if (!Array.isArray(nodes)) {
-    console.error("processNodes: Dữ liệu nodes không phải là mảng", nodes)
+    console.error("processNodes: nodes không phải array", nodes)
     return []
   }
 
@@ -123,33 +126,39 @@ function processNodes(nodes) {
     const status = node.details?.status
     let finalGroup = node.group
 
+    // Xác định group dựa trên status
     if (status === 'offline') {
-      // Dùng group offline riêng cho host/switch để có viền nét đứt
-      if (node.group === 'host') {
-        finalGroup = 'host-offline'
-      } else if (node.group === 'switch') {
-        finalGroup = 'switch-offline'
-      }
+      finalGroup = node.group === 'host' ? 'host-offline' : 'switch-offline'
     } else if (status === 'high-load') {
-      if (node.group === 'host') {
-        finalGroup = 'host-high-load'
-      } else if (node.group === 'switch') {
-        finalGroup = 'switch-high-load'
-      }
+      finalGroup = node.group === 'host' ? 'host-high-load' : 'switch-high-load'
     }
 
-    return { ...node, group: finalGroup }
+    return {
+      ...node,
+      group: finalGroup,
+      // Add tooltip
+      title: `${node.id}\nStatus: ${status || 'unknown'}\n${
+        node.details?.cpu_utilization 
+          ? `CPU: ${node.details.cpu_utilization}%` 
+          : ''
+      }`
+    }
   })
 }
 
 function initializeNetwork() {
   if (!networkContainer.value || !props.graphData) {
-    console.error("TopologyView: Container hoặc graphData chưa sẵn sàng.")
+    console.error("TopologyView: Container hoặc graphData chưa sẵn sàng")
     return
   }
 
   const processedEdges = processEdges(props.graphData.edges)
   const processedNodes = processNodes(props.graphData.nodes)
+
+  console.log('🎨 Initializing network with:', {
+    nodes: processedNodes.length,
+    edges: processedEdges.length
+  })
 
   const data = {
     nodes: processedNodes,
@@ -192,17 +201,7 @@ function initializeNetwork() {
     },
     edges: {
       color: { highlight: '#FFFFFF', opacity: 1.0 },
-      selectionWidth: 4,
-      font: {
-        color: '#00F7F7',
-        size: 11,
-        align: 'middle',
-        strokeWidth: 4,
-        strokeColor: '#0f172a',
-      },
-      arrows: {
-    to: { enabled: true }
-      }
+      selectionWidth: 4
     },
     groups: {
       host: {
@@ -227,13 +226,11 @@ function initializeNetwork() {
         image: iconHost,
         color: {
           border: '#475569',
-          background: '#0f172a',
-          highlight: { border: '#94a3b8', background: '#1e293b' },
-          hover: { border: '#94a3b8', background: '#1e293b' }
+          background: '#0f172a'
         },
         borderWidth: 3,
         borderDashes: [8, 8],
-        opacity: 0.6, 
+        opacity: 0.6,
         shadow: { enabled: false }
       },
       'host-high-load': {
@@ -242,15 +239,12 @@ function initializeNetwork() {
         color: {
           border: '#F60000',
           background: '#0f172a',
-          highlight: { border: '#F60000', background: '#1e293b' },
-          hover: { border: '#F60000', background: '#1e293b' }
+          highlight: { border: '#F60000', background: '#1e293b' }
         },
         shadow: {
           enabled: true,
           color: 'rgba(246, 0, 0, 0.8)',
-          size: 25,
-          x: 0,
-          y: 0
+          size: 25
         }
       },
       switch: {
@@ -259,15 +253,12 @@ function initializeNetwork() {
         color: {
           border: '#f97316',
           background: '#0f172a',
-          highlight: { border: '#f97316', background: '#1e293b' },
-          hover: { border: '#f97316', background: '#1e293b' }
+          highlight: { border: '#f97316', background: '#1e293b' }
         },
         shadow: {
           enabled: true,
           color: 'rgba(249, 115, 22, 0.8)',
-          size: 25,
-          x: 0,
-          y: 0
+          size: 25
         }
       },
       'switch-offline': {
@@ -287,21 +278,13 @@ function initializeNetwork() {
         image: iconSwitch,
         color: {
           border: '#F60000',
-          background: '#0f172a',
-          highlight: { border: '#F60000', background: '#1e293b' },
-          hover: { border: '#F60000', background: '#1e293b' }
+          background: '#0f172a'
         },
         shadow: {
           enabled: true,
           color: 'rgba(246, 0, 0, 0.8)',
-          size: 25,
-          x: 0,
-          y: 0
+          size: 25
         }
-      },
-      offline: {
-        color: { border: '#7f1d1d', background: '#0f172a' },
-        shadow: { enabled: false }
       }
     }
   }
@@ -309,6 +292,7 @@ function initializeNetwork() {
   try {
     networkInstance.value = new Network(networkContainer.value, data, options)
 
+    // Event handlers
     networkInstance.value.on('selectNode', properties => {
       if (properties.nodes.length > 0) {
         emit('node-selected', properties.nodes[0])
@@ -327,9 +311,9 @@ function initializeNetwork() {
       }
     })
 
-    console.log("TopologyView: Khởi tạo Vis.js THÀNH CÔNG!")
+    console.log("✅ Vis.js network initialized")
   } catch (error) {
-    console.error("LỖI KHI KHỞI TẠO VIS.JS:", error)
+    console.error("❌ Error initializing Vis.js:", error)
   }
 }
 
@@ -337,17 +321,22 @@ onMounted(() => {
   initializeNetwork()
 })
 
-watch(() => props.graphData, (newData) => {
-  if (newData && networkInstance.value) {
-    const processedEdges = processEdges(newData.edges)
-    const processedNodes = processNodes(newData.nodes)
+// [FIXED] Watch graphDataString thay vì graphData
+watch(graphDataString, (newVal, oldVal) => {
+  if (newVal !== oldVal && networkInstance.value) {
+    console.log('🔄 Updating network visualization...')
+    
+    const processedEdges = processEdges(props.graphData.edges)
+    const processedNodes = processNodes(props.graphData.nodes)
 
-    networkInstance.value.body.data.nodes.update(processedNodes)
-    networkInstance.value.body.data.edges.update(processedEdges)
-  } else if (newData && !networkInstance.value) {
-    initializeNetwork()
+    try {
+      networkInstance.value.body.data.nodes.update(processedNodes)
+      networkInstance.value.body.data.edges.update(processedEdges)
+    } catch (error) {
+      console.error('❌ Error updating network:', error)
+    }
   }
-}, { deep: true })
+})
 </script>
 
 <style scoped>

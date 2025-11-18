@@ -13,9 +13,9 @@ import requests
 # --- CẤU HÌNH ---
 API_BASE_URL = "http://localhost:5000/api"
 SOCKET_URL = "http://localhost:5000"
-SYNC_INTERVAL = 0.5  # Tăng nhẹ lên 1s để dễ nhìn log (0.5s hơi nhanh quá nếu debug)
+SYNC_INTERVAL = 1.0  # 1 giây mỗi lần gửi
 
-os.makedirs("logs", exist_ok=True)  # Tạo thư mục logs nếu chưa có
+os.makedirs("logs", exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,25 +33,33 @@ sio = socketio.Client()
 
 @sio.event
 def connect():
-    logger.info("Đã kết nối WebSocket tới Backend thành công!")
+    logger.info("✅ Đã kết nối WebSocket tới Backend!")
 
 @sio.event
 def connect_error(data):
-    logger.error(f" Lỗi kết nối WebSocket: {data}")
+    logger.error(f"❌ Lỗi kết nối WebSocket: {data}")
 
 @sio.event
 def disconnect():
-    logger.warning(" Mất kết nối WebSocket!")
+    logger.warning("⚠️ Mất kết nối WebSocket!")
 
 def push_topology_http(net):
-    logger.info(" Đang gửi cấu trúc mạng (Topology) lên Backend...")
+    """Gửi cấu trúc mạng lên Backend qua HTTP"""
+    logger.info("📤 Đang gửi topology lên Backend...")
     topology_data = { "hosts": [], "switches": [], "links": [] }
 
     for h in net.hosts:
-        topology_data["hosts"].append({"name": h.name, "ip": h.IP(), "mac": h.MAC()})
+        topology_data["hosts"].append({
+            "name": h.name,
+            "ip": h.IP(),
+            "mac": h.MAC()
+        })
     
     for s in net.switches:
-        topology_data["switches"].append({"name": s.name, "dpid": s.dpid})
+        topology_data["switches"].append({
+            "name": s.name,
+            "dpid": s.dpid
+        })
     
     processed = set()
     for link in net.links:
@@ -59,66 +67,127 @@ def push_topology_http(net):
         lid = "-".join(sorted([n1, n2]))
         if lid not in processed:
             processed.add(lid)
-            topology_data["links"].append({"node1": n1, "node2": n2, "bandwidth": 100})
+            topology_data["links"].append({
+                "node1": n1,
+                "node2": n2,
+                "bandwidth": 100
+            })
 
     try:
-        requests.post(f"{API_BASE_URL}/init/topology", json=topology_data, timeout=5)
-        logger.info(f" Gửi Topology thành công: {len(net.hosts)} hosts, {len(net.switches)} switches")
+        response = requests.post(
+            f"{API_BASE_URL}/init/topology",
+            json=topology_data,
+            timeout=5
+        )
+        response.raise_for_status()
+        logger.info(f"✅ Gửi Topology thành công: {len(net.hosts)} hosts, {len(net.switches)} switches")
         return True
     except Exception as e:
-        logger.error(f" Lỗi gửi Topology: {e}")
+        logger.error(f"❌ Lỗi gửi Topology: {e}")
         return False
+
+def start_iperf_traffic(net):
+    """
+    Khởi động traffic iPerf giữa các host.
+    
+    Logic:
+    - Host cuối cùng làm Server
+    - Các host còn lại làm Client bắn UDP traffic
+    """
+    if len(net.hosts) < 2:
+        logger.warning("⚠️ Không đủ host để chạy iPerf (cần ít nhất 2)")
+        return False
+    
+    # Chọn server và clients
+    server = net.hosts[-1]
+    clients = net.hosts[:-1]
+    server_ip = server.IP()
+    
+    logger.info(f"🎯 iPerf Server: {server.name} ({server_ip})")
+    
+    # 1. Khởi động Server (UDP mode, chạy background)
+    server.cmd('killall iperf 2>/dev/null')  # Kill process cũ nếu có
+    server.cmd('iperf -s -u > /tmp/iperf_server.log 2>&1 &')
+    logger.info(f"   → Server started on {server.name}")
+    
+    # 2. Đợi Server sẵn sàng (QUAN TRỌNG!)
+    logger.info("⏳ Đợi 3 giây để Server khởi động...")
+    time.sleep(3)
+    
+    # 3. Kiểm tra Server có đang chạy không
+    check_result = server.cmd('ps aux | grep "iperf -s" | grep -v grep')
+    if not check_result.strip():
+        logger.error("❌ iPerf Server không chạy! Kiểm tra lại.")
+        return False
+    logger.info("✅ iPerf Server đã sẵn sàng")
+    
+    # 4. Khởi động Clients
+    for client in clients:
+        client.cmd('killall iperf 2>/dev/null')
+        
+        # Tạo traffic với bandwidth khác nhau cho mỗi client
+        # h1: 3M, h2: 5M, h3: 7M, ...
+        host_num = int(client.name.replace('h', ''))
+        bandwidth = 3 + (host_num - 1) * 2  # 3, 5, 7, 9, ...
+        
+        cmd = f'iperf -c {server_ip} -u -b {bandwidth}M -t 999999 > /tmp/iperf_{client.name}.log 2>&1 &'
+        client.cmd(cmd)
+        logger.info(f"   → {client.name} → {server.name} | {bandwidth} Mbps")
+    
+    # 5. Verify clients đang chạy
+    time.sleep(1)
+    running_clients = 0
+    for client in clients:
+        check = client.cmd('ps aux | grep "iperf -c" | grep -v grep')
+        if check.strip():
+            running_clients += 1
+    
+    logger.info(f"✅ iPerf started: {running_clients}/{len(clients)} clients running")
+    return True
 
 def run_simulation():
     # 1. Khởi tạo Mininet
-    logger.info("🛠️ Đang khởi tạo mạng Mininet...")
+    logger.info("🛠️ Khởi tạo mạng Mininet...")
     topo = ConfigTopo()
-    net = Mininet(topo=topo)
+    net = Mininet(topo=topo, switch=OVSKernelSwitch)
     net.start()
+    
+    logger.info(f"✅ Mininet started with {len(net.hosts)} hosts, {len(net.switches)} switches")
 
     # 2. Kết nối WebSocket
-    logger.info(f"🔌 Đang kết nối tới {SOCKET_URL}...")
+    logger.info(f"🔌 Kết nối tới {SOCKET_URL}...")
     try:
-        sio.connect(SOCKET_URL)
+        sio.connect(SOCKET_URL, wait_timeout=5)
     except Exception as e:
-        logger.error(f" Không thể kết nối SocketIO: {e}")
+        logger.error(f"❌ Không thể kết nối SocketIO: {e}")
         net.stop()
         return
 
     # 3. Gửi Topology
     if not push_topology_http(net):
+        logger.error("❌ Không thể gửi topology, dừng chương trình")
         net.stop()
         return
-
-    # 4. KHỞI ĐỘNG IPERF (Đã sửa lỗi logic)
-    if len(net.hosts) >= 2:
-        server = net.hosts[-1] # Host cuối làm Server
-        clients = net.hosts[:-1] # Các host còn lại làm Client
-        
-        server_ip = server.IP()
-        logger.info(f" [iPerf] Khởi động Server trên {server.name} ({server_ip})...")
-        
-        # Chạy Server
-        server.cmd('iperf -s -u &')
-        
-        # QUAN TRỌNG: Đợi 2 giây để Server sẵn sàng nhận kết nối
-        logger.info(" Đợi 2s để iPerf Server sẵn sàng...")
-        time.sleep(2)
-
-        # Chạy Client
-        for client in clients:
-            logger.info(f" [iPerf] {client.name} bắt đầu bắn dữ liệu tới {server.name}...")
-            # Chạy vô hạn (-t 999999), băng thông 5M (-b 5M)
-            client.cmd(f'iperf -c {server_ip} -u -b 5M -t 999999 &')
-    else:
-        logger.warning(" Không đủ host để chạy kịch bản iPerf!")
-
-    logger.info(">>> Bắt đầu vòng lặp thu thập dữ liệu (Real-time)...")
     
-    link_counters = {} 
+    # Đợi Backend xử lý
+    time.sleep(2)
+
+    # 4. Khởi động iPerf Traffic
+    logger.info("🚀 Khởi động iPerf traffic...")
+    if not start_iperf_traffic(net):
+        logger.warning("⚠️ iPerf không khởi động được, nhưng tiếp tục chạy...")
+
+    # 5. Main Loop - Thu thập và gửi dữ liệu
+    logger.info("=" * 70)
+    logger.info("📡 BẮT ĐẦU VÒNG LẶP THU THẬP DỮ LIỆU")
+    logger.info("=" * 70)
+    
+    link_counters = {}
+    loop_count = 0
 
     try:
         while True:
+            loop_count += 1
             start_time = time.time()
             
             telemetry_batch = {
@@ -127,47 +196,78 @@ def run_simulation():
                 "switches": []
             }
 
-            # A. Host Metrics
+            # A. Thu thập Host Metrics
             for h in net.hosts:
                 cpu = collector.get_host_cpu_usage(h)
                 mem = collector.get_host_memory_usage(h)
                 telemetry_batch["hosts"].append({
-                    "name": h.name, "cpu": cpu, "mem": mem
+                    "name": h.name,
+                    "cpu": cpu,
+                    "mem": mem
                 })
 
-            # B. Switch Metrics
+            # B. Thu thập Switch Metrics (Heartbeat)
             for s in net.switches:
                 telemetry_batch["switches"].append(s.name)
 
-            # C. Link Metrics
-            link_stats = link_collector.collect_link_metrics(net, link_counters, SYNC_INTERVAL)
-            for lid, val in link_stats.items():
-                telemetry_batch["links"].append({"id": lid, "bw": val})
-
-            # LOG: In ra màn hình để bạn thấy nó đang chạy
-            total_bw = sum(d['bw'] for d in telemetry_batch['links'])
-            logger.info(f"📡 Gửi dữ liệu: {len(net.hosts)} Hosts | Tổng lưu lượng mạng: {total_bw:.2f} Mbps")
+            # C. Thu thập Link Metrics
+            link_stats = link_collector.collect_link_metrics(
+                net,
+                link_counters,
+                SYNC_INTERVAL
+            )
             
-            if total_bw > 0:
-                # In chi tiết link nào đang có traffic
-                active_links = [f"{l['id']}:{l['bw']}M" for l in telemetry_batch['links'] if l['bw'] > 0]
-                logger.info(f"    Active Links: {', '.join(active_links)}")
+            for lid, throughput in link_stats.items():
+                telemetry_batch["links"].append({
+                    "id": lid,
+                    "bw": throughput
+                })
 
-            # Gửi WebSocket
-            sio.emit('mininet_telemetry', telemetry_batch)
+            # D. Tính toán thống kê
+            total_bw = sum(d['bw'] for d in telemetry_batch['links'])
+            avg_cpu = sum(h['cpu'] for h in telemetry_batch['hosts']) / len(net.hosts)
+            
+            # E. Log thông tin
+            logger.info(f"[Loop #{loop_count:04d}] Total BW: {total_bw:6.2f} Mbps | Avg CPU: {avg_cpu:5.1f}%")
+            
+            # Log chi tiết links có traffic
+            active_links = [
+                f"{l['id']}:{l['bw']:.1f}M"
+                for l in telemetry_batch['links']
+                if l['bw'] > 0.1
+            ]
+            if active_links:
+                logger.info(f"   Active Links: {', '.join(active_links)}")
+            else:
+                logger.warning("   ⚠️ Không có link nào có traffic!")
 
-            # Ngủ bù trừ thời gian xử lý (giúp mượt hơn)
+            # F. Gửi qua WebSocket
+            try:
+                sio.emit('mininet_telemetry', telemetry_batch)
+            except Exception as e:
+                logger.error(f"❌ Lỗi gửi WebSocket: {e}")
+
+            # G. Sleep để giữ đúng interval
             elapsed = time.time() - start_time
             sleep_time = max(0.1, SYNC_INTERVAL - elapsed)
             time.sleep(sleep_time)
 
     except KeyboardInterrupt:
-        logger.info("\n Đang dừng chương trình...")
+        logger.info("\n🛑 Nhận Ctrl+C, đang dừng...")
+    except Exception as e:
+        logger.error(f"❌ Lỗi nghiêm trọng: {e}", exc_info=True)
     finally:
+        logger.info("🧹 Dọn dẹp...")
+        
+        # Dừng iPerf
+        for h in net.hosts:
+            h.cmd('killall iperf 2>/dev/null')
+        
         if sio.connected:
             sio.disconnect()
+        
         net.stop()
-        logger.info(" Đã dọn dẹp Mininet.")
+        logger.info("✅ Đã dừng Mininet sạch sẽ")
 
 if __name__ == '__main__':
     run_simulation()
