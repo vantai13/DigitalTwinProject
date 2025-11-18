@@ -138,39 +138,33 @@ function setupWebSocket() {
     isLoading.value = false
   })
 
-  // --- SỬ DỤNG BATCH UPDATE CHO CÁC SỰ KIỆN ---
-  socket.on('host_updated', (updatedHost) => {
-    queueUpdate('node', updatedHost)
-  })
+  // [SỬA] Lắng nghe sự kiện BATCH thay vì sự kiện lẻ
+  socket.on('network_batch_update', (batchData) => {
+    if (!networkData.value) return;
 
-  socket.on('switch_updated', (updatedSwitch) => {
-    queueUpdate('node', updatedSwitch)
-  })
+    // 1. Cập nhật Hosts
+    if (batchData.hosts) {
+      batchData.hosts.forEach(hData => {
+        const node = networkData.value.graph_data.nodes.find(n => n.id === hData.name);
+        if (node) {
+           // Merge dữ liệu mới vào details cũ
+           node.details = { ...node.details, cpu_utilization: hData.cpu, memory_usage: hData.mem, status: 'up' };
+           // Logic đổi màu node nếu cần thiết có thể xử lý ở đây hoặc trong TopologyView dựa trên details
+        }
+      });
+    }
 
-  socket.on('link_updated', (updatedLink) => {
-    queueUpdate('link', updatedLink)
-  })
-
-  // --- XỬ LÝ LỖI VÀ RETRY ---
-  socket.on('connect_error', (error) => {
-    console.error('❌ Connection Error:', error.message)
-    connectionStatus.value = 'error'
-    
-    if (retryCount.value < MAX_RETRIES) {
-      const waitTime = 2000
-      retryCount.value++
-      errorMessage.value = `Connection lost. Retrying (${retryCount.value}/${MAX_RETRIES})...`
-      
-      console.log(`⏳ Waiting ${waitTime}ms before retry...`)
-      if (retryTimer) clearTimeout(retryTimer)
-      
-      retryTimer = setTimeout(() => {
-        if (socket) socket.connect()
-      }, waitTime)
-      
-    } else {
-      errorMessage.value = " Unable to connect to Backend. Please check if the server is running."
-      isLoading.value = false
+    // 2. Cập nhật Links
+    if (batchData.links) {
+      batchData.links.forEach(lData => {
+        const edge = networkData.value.graph_data.edges.find(e => e.id === lData.id);
+        if (edge) {
+           edge.label = `${lData.bw.toFixed(1)} Mbps`;
+           edge.utilization = (lData.bw / edge.details.bandwidth_capacity) * 100; // Tính lại %
+           edge.status = 'up';
+           edge.details.current_throughput = lData.bw;
+        }
+      });
     }
   })
   

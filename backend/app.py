@@ -268,36 +268,32 @@ def handle_mininet_telemetry(data):
         "switches": ["s1", "s2"]
     }
     """
-    # Dùng Lock để an toàn dữ liệu khi nhiều luồng truy cập
     with data_lock:
         # 1. Cập nhật Hosts
         for h_data in data.get('hosts', []):
             host = digital_twin.get_host(h_data['name'])
             if host:
-                # Cập nhật metrics vào Model
                 host.update_resource_metrics(h_data['cpu'], h_data['mem'])
-                # Bắn tin ngay lập tức cho Frontend (VueJS)
-                broadcast_host_update(host)
 
-        # 2. Cập nhật Links
+        # 2. Cập nhật Links vào Model
         for l_data in data.get('links', []):
-            # Tách ID "h1-s1" thành node1="h1", node2="s1"
             parts = l_data['id'].split('-')
             if len(parts) == 2:
                 link = digital_twin.get_link(parts[0], parts[1])
                 if link:
-                    link.update_performance_metrics(l_data['bw'], 0) # 0 là latency (tạm thời)
-                    broadcast_link_update(link)
+                    # 0 là latency (tạm thời)
+                    link.update_performance_metrics(l_data['bw'], 0) 
 
         # 3. Cập nhật Switches (Heartbeat)
         for s_name in data.get('switches', []):
             switch = digital_twin.get_switch(s_name)
             if switch:
                 switch.heartbeat()
-                broadcast_switch_update(switch)
+        
+    socketio.emit('network_batch_update', data)
 
     # (Tùy chọn) In log nhẹ để biết đang nhận tin
-    # logger.info(f"Đã nhận telemetry từ Mininet: {len(data['hosts'])} hosts")
+    logger.info(f"Đã nhận telemetry từ Mininet: {len(data['hosts'])} hosts")
 
 # ============================================
 # REAPER THREAD (Giữ nguyên)
