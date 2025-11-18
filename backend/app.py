@@ -7,8 +7,11 @@ from flask_socketio import SocketIO, emit
 import threading
 from datetime import datetime, timedelta
 import time
+from logging.handlers import RotatingFileHandler
 import logging
 from threading import Lock
+from logging_config import get_logger
+
 
 try:
     from model.host import Host
@@ -19,23 +22,28 @@ except ImportError as e:
     print(f"Lỗi nghiêm trọng: Không thể import các lớp Model: {e}")
     sys.exit(1)
 
-
 # ============================================
 # CẤU HÌNH LOGGING (Thay thế hoàn toàn print)
 # ============================================
 # Tạo thư mục logs nếu chưa tồn tại
-os.makedirs("logs", exist_ok=True)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Trỏ đến thư mục logs nằm ngoài backend
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+LOG_FILE = os.path.join(LOG_DIR, "backend.log")
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s [%(levelname)-8s] %(message)s',
     handlers=[
-        logging.FileHandler("logs/backend.log", encoding='utf-8'),  # Ghi vào thư mục logs
-        logging.StreamHandler(sys.stdout)                            # Hiển thị trên console
+        logging.FileHandler(LOG_FILE, encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
     ]
 )
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 
 # ============================================
 # KHỞI TẠO FLASK VÀ SOCKETIO
@@ -363,6 +371,6 @@ if __name__ == '__main__':
         app,
         host='0.0.0.0',
         port=5000,
-        debug=False,
+        debug=True,
         allow_unsafe_werkzeug=True
     )
