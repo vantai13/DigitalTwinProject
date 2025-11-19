@@ -35,9 +35,9 @@ function processEdges(edges) {
     // (Lưu ý: data từ backend có thể nằm trong edge hoặc edge.details tùy cách bạn gán ở App.vue)
     const status = edge.status || edge.details?.status || 'unknown'
     const utilization = edge.utilization || 0
-    if (utilization > 1 && (status === 'down' || status === 'offline' || status === 'unknown')) {
-        status = 'up'; 
-    }
+    // if (utilization > 1 && (status === 'down' || status === 'offline' || status === 'unknown')) {
+    //     status = 'up'; 
+    // }
 
     // --- [LOGIC HIỂN THỊ DỰA TRÊN TRẠNG THÁI] ---
     switch (status) {

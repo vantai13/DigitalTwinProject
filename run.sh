@@ -8,7 +8,7 @@ python backend/app.py &
 
 # Chạy Mininet Simulation
 deactivate
-sudo python3 mininet_twin/run_simulation.py &
+sudo python3 mininet_twin/main.py &
 
 # Chạy VueJS Frontend
 cd frontend
