@@ -13,7 +13,7 @@ import collector
 import link_collector
 import requests
 
-# --- CẤU HÌNH ---
+# --- CẤU HÌNH --- sua mot ti nef
 API_BASE_URL = "http://localhost:5000/api"
 SOCKET_URL = "http://localhost:5000"
 SYNC_INTERVAL = 1.0  # 1 giây mỗi lần gửi
