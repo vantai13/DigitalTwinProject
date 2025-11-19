@@ -45,16 +45,15 @@ class Link:
         self.latency = latency
         self.jitter = jitter
         
-        # --- [LOGIC MỚI] Tự quyết định trạng thái tại đây ---
+        #  Tự quyết định trạng thái tại đây ---
         utilization = self.get_utilization()
         
-        if self.status != 'down': # Chỉ đánh giá nếu link không bị đứt
-            if utilization >= self.THRESHOLD_CRITICAL:
-                self.set_status('high-load')
-            elif utilization >= self.THRESHOLD_WARNING:
-                self.set_status('warning')
-            else:
-                self.set_status('up')
+        if utilization >= self.THRESHOLD_CRITICAL:
+            self.set_status('high-load')
+        elif utilization >= self.THRESHOLD_WARNING:
+            self.set_status('warning')
+        else:
+            self.set_status('up')
 
     def get_utilization(self):
         """

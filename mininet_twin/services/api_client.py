@@ -40,10 +40,13 @@ class TopologyApiClient:
             
             if lid not in processed:
                 processed.add(lid)
+                bw_capacity = 100
+                if n1.startswith('s') and n2.startswith('s'):
+                    bw_capacity = 1000
                 topology_data["links"].append({
                     "node1": n1,
                     "node2": n2,
-                    "bandwidth": 100 # Default bandwidth
+                    "bandwidth": bw_capacity 
                 })
 
         # Gửi request

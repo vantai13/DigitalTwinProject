@@ -261,6 +261,7 @@ def handle_mininet_telemetry(data):
         for h_data in data.get('hosts', []):
             host = digital_twin.get_host(h_data['name'])
             if host:
+                host.set_status('up') 
                 host.update_resource_metrics(h_data['cpu'], h_data['mem'])
                 h_data['status'] = host.status
 
@@ -270,10 +271,12 @@ def handle_mininet_telemetry(data):
             if len(parts) == 2:
                 link = digital_twin.get_link(parts[0], parts[1])
                 if link:
-                    # 0 là latency (tạm thời)
-                    link.update_performance_metrics(l_data['bw'], 0) 
-                    if link.status != 'up':
+                    #  Nếu link đang bị đánh dấu down/offline mà có dữ liệu => Hồi sinh nó trước
+                    if link.status in ['down', 'offline', 'unknown']:
                         link.set_status('up')
+                 
+                    link.update_performance_metrics(l_data['bw'], 0) 
+                
                     l_data['status'] = link.status
 
         #  Cập nhật Switches (Heartbeat)
@@ -293,12 +296,12 @@ def handle_mininet_telemetry(data):
 
 def check_device_status_loop():
     """Kiểm tra thiết bị timeout"""
-    TIMEOUT_SECONDS = 10.0 
+    TIMEOUT_SECONDS = 6
     logger.info(f" Kiểm tra thiết bị mỗi 5 giây (Timeout: {TIMEOUT_SECONDS}s)")
 
     while True:
         try:
-            time.sleep(5) 
+            time.sleep(3) 
             with data_lock:
                 now = datetime.now()
                 timeout_threshold = timedelta(seconds=TIMEOUT_SECONDS)
