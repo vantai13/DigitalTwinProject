@@ -4,8 +4,10 @@ import random
 import os
 import socketio
 import logging
+import threading
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSKernelSwitch
+from mininet.link import TCLink
 from topo import ConfigTopo
 import collector
 import link_collector
@@ -96,95 +98,48 @@ def generate_random_traffic(net):
     """
     while True:
         try:
-            # 1. Chọn ngẫu nhiên cặp Host (Src -> Dst)
+            #  Chọn ngẫu nhiên cặp Host (Src -> Dst)
             src, dst = random.sample(net.hosts, 2)
             
-            # 2. Random băng thông để tạo hiệu ứng đổi màu (Visual effects)
-            # < 50Mbps: Xanh, 70Mbps: Cam, >90Mbps: Đỏ
+            #  Random băng thông
             bw_options = [5, 10, 20, 50, 80, 120] 
             bandwidth = random.choice(bw_options)
             
-            # 3. Random thời gian chạy (ngắn thôi để thay đổi liên tục)
+            # Random thời gian chạy 
             duration = random.randint(2, 5)
             
-            logger.info(f"⚡ [Traffic] {src.name} -> {dst.name} : {bandwidth}Mbps trong {duration}s")
+            logger.info(f" [Traffic] {src.name} -> {dst.name} : {bandwidth}Mbps trong {duration}s")
             
-            # 4. Chạy lệnh iPerf (UDP)
+            #  Chạy lệnh iPerf (UDP)
             # -b: băng thông, -t: thời gian, -u: udp
             cmd = f'iperf -c {dst.IP()} -u -b {bandwidth}M -t {duration} &'
             src.cmd(cmd)
             
-            # 5. Nghỉ một chút trước khi tạo luồng tiếp theo
+            #  Nghỉ một chút trước khi tạo luồng tiếp theo
             time.sleep(random.uniform(0.5, 2.0))
             
         except Exception as e:
             logger.error(f"Lỗi tạo traffic: {e}")
             time.sleep(1)
 
-def start_iperf_traffic(net):
-    """
-    Khởi động traffic iPerf giữa các host.
-    Logic:
-    - Host cuối cùng làm Server
-    - Các host còn lại làm Client bắn UDP traffic
-    """
-    if len(net.hosts) < 2:
-        logger.warning("Không đủ host để chạy iPerf (cần ít nhất 2)")
-        return False
+def start_traffic_simulation(net):
+    # khởi động iPerf Server trên TẤT CẢ các host
     
-    # Chọn server và clients
-    server = net.hosts[-1]
-    clients = net.hosts[:-1]
-    server_ip = server.IP()
+    logger.info(" Khởi động iPerf Server trên toàn bộ Host...")
+    for h in net.hosts:
+        h.cmd('killall iperf 2>/dev/null')
+        h.cmd('iperf -s -u &') # Chạy server nhận UDP
     
-    logger.info(f"iPerf Server: {server.name} ({server_ip})")
-    
-    # Khởi động Server (UDP mode, chạy background)
-    server.cmd('killall iperf 2>/dev/null')  # Kill process cũ nếu có
-    server.cmd('iperf -s -u > /tmp/iperf_server.log 2>&1 &')
-    logger.info(f"   → Server started on {server.name}")
-
-    #  Đợi Server sẵn sàng (QUAN TRỌNG!)
-    logger.info("Đợi 3 giây để Server khởi động...")
-    time.sleep(3)
-    
-    #  Kiểm tra Server có đang chạy không
-    check_result = server.cmd('ps aux | grep "iperf -s" | grep -v grep')
-    if not check_result.strip():
-        logger.error(" iPerf Server không chạy! Kiểm tra lại.")
-        return False
-    logger.info("iPerf Server đã sẵn sàng")
-    
-    #  Khởi động Clients
-    for client in clients:
-        client.cmd('killall iperf 2>/dev/null')
-        
-        # Tạo traffic với bandwidth khác nhau cho mỗi client
-        # h1: 3M, h2: 5M, h3: 7M, ...
-        host_num = int(client.name.replace('h', ''))
-        bandwidth = 3 + (host_num - 1) * 2  # 3, 5, 7, 9, ...
-        
-        cmd = f'iperf -c {server_ip} -u -b {bandwidth}M -t 999999 > /tmp/iperf_{client.name}.log 2>&1 &'
-        client.cmd(cmd)
-        logger.info(f"   → {client.name} → {server.name} | {bandwidth} Mbps")
-    
-    #  Verify clients đang chạy
-    time.sleep(1)
-    running_clients = 0
-    for client in clients:
-        check = client.cmd('ps aux | grep "iperf -c" | grep -v grep')
-        if check.strip():
-            running_clients += 1
-    
-    logger.info(f"iPerf started: {running_clients}/{len(clients)} clients running")
-    return True
+    # Chạy luồng tạo traffic ngẫu nhiên
+    t = threading.Thread(target=generate_random_traffic, args=(net,), daemon=True)
+    t.start()
 
 def run_simulation():
     # Khởi tạo Mininet
     logger.info(" Khởi tạo mạng Mininet...")
     topo = ConfigTopo()
     # net = Mininet(topo=topo)
-    net = Mininet(topo=topo, switch=OVSKernelSwitch)
+    net = Mininet(topo=topo, switch=OVSKernelSwitch, link=TCLink)
     net.start()
     
     logger.info(f" Mininet started with {len(net.hosts)} hosts, {len(net.switches)} switches")
@@ -209,7 +164,7 @@ def run_simulation():
 
     #  Khởi động iPerf Traffic
     logger.info(" Khởi động iPerf traffic...")
-    if not start_iperf_traffic(net):
+    if not start_traffic_simulation(net):
         logger.warning(" iPerf không khởi động được, nhưng tiếp tục chạy...")
 
     # 5. Main Loop - Thu thập và gửi dữ liệu
@@ -220,10 +175,15 @@ def run_simulation():
     link_counters = {}
     loop_count = 0
 
+    last_check_time = time.time()
+
     try:
         while True:
             loop_count += 1
             start_time = time.time()
+            current_time = time.time()
+            real_interval = current_time - last_check_time
+            last_check_time = current_time
             
             telemetry_batch = {
                 "hosts": [],
@@ -249,7 +209,7 @@ def run_simulation():
             link_stats = link_collector.collect_link_metrics(
                 net,
                 link_counters,
-                SYNC_INTERVAL
+                real_interval
             )
             
             for lid, throughput in link_stats.items():
