@@ -38,14 +38,16 @@ class Host:
         self.memory_usage = memory
         self.last_update_time = datetime.now()
 
-        if self.status != 'offline':
-            
-            if self.cpu_utilization >= self.HIGH_CPU_THRESHOLD:
-                if self.status != 'high-load':
-                    self.set_status('high-load')
-            else:
-                if self.status != 'up':
-                    self.set_status('up')
+        if self.status == 'offline':
+             self.set_status('up')
+
+        if self.cpu_utilization >= self.HIGH_CPU_THRESHOLD:
+            if self.status != 'high-load':
+                self.set_status('high-load')
+        else:
+            # Nếu CPU thấp, và trạng thái cũ là high-load hoặc unknown -> về 'up'
+            if self.status in ['high-load', 'unknown']:
+                self.set_status('up')
         
 
     def update_network_metrics(self, tx_bytes, rx_bytes):

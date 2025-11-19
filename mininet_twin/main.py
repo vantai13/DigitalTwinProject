@@ -30,7 +30,7 @@ def run_simulation():
     # 1. Khởi tạo Mininet
     logger.info(" Khởi tạo mạng Mininet...")
     topo = ConfigTopo()
-    net = Mininet(topo=topo, switch=OVSKernelSwitch, link=TCLink)
+    net = Mininet(topo=topo, switch=OVSKernelSwitch)
     net.start()
     logger.info(f" Mininet started with {len(net.hosts)} hosts, {len(net.switches)} switches")
 
@@ -60,16 +60,20 @@ def run_simulation():
     
     link_counters = {}
     loop_count = 0
-    last_check_time = time.time()
-
+    last_check_time = time.monotonic()
     try:
         while True:
             loop_count += 1
-            start_time = time.time()
+            loop_start_time = time.monotonic() # Dùng monotonic cho sleep
             
-            # Tính thời gian thực giữa các lần đo để tính băng thông chính xác
-            current_time = time.time()
-            real_interval = current_time - last_check_time
+            # Tính thời gian thực trôi qua
+            current_time = time.monotonic()
+            real_interval = current_time - last_check_time # tính thời gian chênh lệch giữa 2 vòng lặp đẻ tính bằng thoong
+            
+            # Tránh lỗi chia cho 0 hoặc số âm quá nhỏ
+            if real_interval < 0.001: 
+                real_interval = 0.001
+                
             last_check_time = current_time
             
             telemetry_batch = {
@@ -110,8 +114,8 @@ def run_simulation():
             
             socket_client.send_telemetry(telemetry_batch)
 
-            # --- Sleep giữ nhịp ---
-            elapsed = time.time() - start_time
+            # Sleep giữ nhịp
+            elapsed = time.monotonic() - loop_start_time
             sleep_time = max(0.1, SYNC_INTERVAL - elapsed)
             time.sleep(sleep_time)
 

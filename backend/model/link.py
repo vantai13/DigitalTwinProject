@@ -2,6 +2,9 @@
 from datetime import datetime
 class Link:
 
+    THRESHOLD_WARNING = 70.0  # > 70% là cảnh báo (Cam)
+    THRESHOLD_CRITICAL = 90.0 # > 90% là nguy hiểm (Đỏ)
+
     def __init__(self, node1, node2, bandwidth_capacity):
         """
             node1 (str): Tên của thiết bị 1 
@@ -10,7 +13,7 @@ class Link:
                                         của link (tính bằng Mbps).
         """
         # Chúng ta tạo một ID duy nhất cho link để dễ dàng tham chiếu
-        self.id = f"{node1}-{node2}"
+        self.id = "-".join(sorted([node1, node2]))
         self.node1 = node1
         self.node2 = node2
         self.bandwidth_capacity = bandwidth_capacity  # (Mbps)
@@ -27,11 +30,11 @@ class Link:
         self.jitter = 0.0              # (ms) - Biến động độ trễ
 
     def set_status(self, new_status):
-        if new_status in ['up', 'down', 'unknown']:
+        # Thêm các trạng thái mới vào danh sách hợp lệ
+        valid_states = ['up', 'down', 'unknown', 'warning', 'high-load']
+        if new_status in valid_states:
             self.status = new_status
-            print(f"[{self.id}] Cập nhật trạng thái: {self.status}")
-        else:
-            print(f"[Lỗi] Trạng thái '{new_status}' không hợp lệ cho {self.id}.")
+        
 
     def update_performance_metrics(self, throughput, latency=0.0, jitter=0.0):
         """
@@ -42,13 +45,16 @@ class Link:
         self.latency = latency
         self.jitter = jitter
         
-        # Tính toán độ bão hòa (utilization) của link
-        if self.bandwidth_capacity > 0:  # Có lưu lượng được kết nối 
-            utilization = (self.current_throughput / self.bandwidth_capacity) * 100
-            print(f"[{self.id}] Thông lượng: {self.current_throughput:.2f} Mbps "
-                  f"(Sử dụng: {utilization:.2f}%)")
-        else:
-            print(f"[{self.id}] Thông lượng: {self.current_throughput:.2f} Mbps")
+        # --- [LOGIC MỚI] Tự quyết định trạng thái tại đây ---
+        utilization = self.get_utilization()
+        
+        if self.status != 'down': # Chỉ đánh giá nếu link không bị đứt
+            if utilization >= self.THRESHOLD_CRITICAL:
+                self.set_status('high-load')
+            elif utilization >= self.THRESHOLD_WARNING:
+                self.set_status('warning')
+            else:
+                self.set_status('up')
 
     def get_utilization(self):
         """

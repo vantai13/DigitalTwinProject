@@ -42,10 +42,10 @@ class NetworkModel:
         return new_switch
 
     def add_link(self, node1_name, node2_name, bandwidth_capacity=100.0):
-        link_id = f"{node1_name}-{node2_name}"
-        reverse_link_id = f"{node2_name}-{node1_name}"
+        link_id = "-".join(sorted([node1_name, node2_name]))
         
-        if link_id in self.links or reverse_link_id in self.links:
+        
+        if link_id  in self.links:
             print(f"[Lỗi] Link giữa '{node1_name}' và '{node2_name}' đã tồn tại.")
             return None
 

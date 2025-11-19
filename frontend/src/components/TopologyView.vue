@@ -22,71 +22,60 @@ const networkInstance = ref(null) // đối tượng vis-network
 const graphDataString = computed(() => JSON.stringify(props.graphData))
 
 function processEdges(edges) {
-  const highThreshold = 90
-  const mediumThreshold = 70
-
-  if (!Array.isArray(edges)) {
-    console.error("processEdges: edges không phải array", edges)
-    return []
-  }
+  if (!Array.isArray(edges)) return []
 
   return edges.map(edge => {
-    let colorVal = '#00F7F7'  // Default: cyan
+    // Mặc định (status = 'up')
+    let colorVal = '#00F7F7'   // Cyan
+    let widthVal = 2.5
     let isDashed = false
     let shadowConfig = { enabled: false }
-    let widthVal = 2.5
+    
+    // Lấy status từ Backend gửi xuống
+    // (Lưu ý: data từ backend có thể nằm trong edge hoặc edge.details tùy cách bạn gán ở App.vue)
+    const status = edge.status || edge.details?.status || 'unknown'
+    const utilization = edge.utilization || 0
 
-    // Xác định màu dựa trên status và utilization
-    if (edge.status === 'down') {
-      colorVal = '#475569'  // Gray
-      isDashed = true
-      widthVal = 1.5
-    } else if (edge.utilization > highThreshold) {
-      colorVal = '#F60000'  // Red
-      widthVal = 4
-      shadowConfig = {
-        enabled: true,
-        color: 'rgba(246, 0, 0, 0.8)',
-        size: 25
-      }
-    } else if (edge.utilization > mediumThreshold) {
-      colorVal = '#f97316'  // Orange
-      widthVal = 3.5
-      shadowConfig = {
-        enabled: true,
-        color: 'rgba(249, 115, 22, 0.6)',
-        size: 20
-      }
-    } else if (edge.utilization > 0) {
-      // Low traffic - cyan with glow
-      shadowConfig = {
-        enabled: true,
-        color: 'rgba(0, 247, 247, 0.5)',
-        size: 15
-      }
+    // --- [LOGIC HIỂN THỊ DỰA TRÊN TRẠNG THÁI] ---
+    switch (status) {
+      case 'down':
+      case 'offline':
+        colorVal = '#475569' // Gray
+        isDashed = true
+        widthVal = 1.5
+        break
+        
+      case 'high-load':
+        colorVal = '#F60000' // Red - Nguy hiểm
+        widthVal = 4
+        shadowConfig = { enabled: true, color: 'rgba(246, 0, 0, 0.8)', size: 25 }
+        break
+        
+      case 'warning':
+        colorVal = '#f97316' // Orange - Cảnh báo
+        widthVal = 3.5
+        shadowConfig = { enabled: true, color: 'rgba(249, 115, 22, 0.6)', size: 20 }
+        break
+        
+      case 'up':
+      default:
+        // Nếu đang UP mà có lưu lượng > 0 thì cho phát sáng nhẹ cho đẹp
+        if (utilization > 0) {
+           shadowConfig = { enabled: true, color: 'rgba(0, 247, 247, 0.5)', size: 15 }
+        }
+        break
     }
 
-    // Animation arrows (chỉ khi có traffic)
+    // Animation arrows (Giữ nguyên logic hiển thị mũi tên khi có traffic)
     let arrowsConfig = { to: { enabled: false } }
-    if (edge.status === 'up' && edge.utilization > 1) {
+    if (status !== 'down' && utilization > 1) {
       let arrowSpeed = 1
-      if (edge.utilization > highThreshold) {
-        arrowSpeed = 2
-      } else if (edge.utilization > mediumThreshold) {
-        arrowSpeed = 1.5
-      }
-
+      if (status === 'high-load') arrowSpeed = 2.5
+      else if (status === 'warning') arrowSpeed = 1.5
+      
       arrowsConfig = {
-        to: {
-          enabled: true,
-          type: 'arrow',
-          scaleFactor: 0.8,
-        },
-        middle: {
-          enabled: true,
-          type: 'arrow',
-          scaleFactor: 0.6
-        }
+        to: { enabled: true, type: 'arrow', scaleFactor: 0.8 },
+        middle: { enabled: true, type: 'arrow', scaleFactor: 0.6 }
       }
     }
 
@@ -100,18 +89,10 @@ function processEdges(edges) {
       width: widthVal,
       arrows: arrowsConfig,
       dashes: isDashed,
-      smooth: {
-        type: 'continuous',
-        roundness: 0.5
-      },
       shadow: shadowConfig,
-      font: {
-        color: '#00F7F7',
-        size: 11,
-        align: 'middle',
-        strokeWidth: 3,
-        strokeColor: '#0f172a'
-      }
+      // ... (giữ nguyên các thuộc tính font/smooth)
+      smooth: { type: 'continuous', roundness: 0.5 },
+      font: { color: '#00F7F7', size: 11, align: 'middle', strokeWidth: 3, strokeColor: '#0f172a' }
     }
   })
 }

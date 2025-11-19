@@ -262,6 +262,7 @@ def handle_mininet_telemetry(data):
             host = digital_twin.get_host(h_data['name'])
             if host:
                 host.update_resource_metrics(h_data['cpu'], h_data['mem'])
+                h_data['status'] = host.status
 
         
         for l_data in data.get('links', []):
@@ -271,6 +272,9 @@ def handle_mininet_telemetry(data):
                 if link:
                     # 0 là latency (tạm thời)
                     link.update_performance_metrics(l_data['bw'], 0) 
+                    if link.status != 'up':
+                        link.set_status('up')
+                    l_data['status'] = link.status
 
         #  Cập nhật Switches (Heartbeat)
         for s_name in data.get('switches', []):

@@ -24,7 +24,7 @@ class Switch:
         self.flow_table = [] 
 
     def set_status(self, new_status):
-        if new_status in ['up', 'unknown', 'offline']:
+        if new_status in ['up', 'unknown', 'offline', 'high-load']:
             self.status = new_status
             print(f"[{self.name}] Cập nhật trạng thái: {self.status}")
         else:
@@ -44,9 +44,8 @@ class Switch:
 
     def heartbeat(self):
         self.last_update_time = datetime.now()
-        # Nếu nó đang 'offline', đánh dấu nó 'up' trở lại
-        # if self.status == 'offline':
-        #     self.set_status('up')
+        if self.status in ['offline', 'unknown']:
+            self.set_status('up')
 
         if self.status != 'up':
             self.set_status('up')

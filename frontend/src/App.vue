@@ -110,12 +110,15 @@ function setupWebSocket() {
             ...node.details,
             cpu_utilization: hData.cpu,
             memory_usage: hData.mem,
-            status: hData.cpu > 90 ? 'high-load' : 'up'
+            // Lấy status trực tiếp từ backend gửi xuống
+            status: hData.status || 'up' 
           }
           
           // Cập nhật group để đổi màu node
-          if (hData.cpu > 90) {
+          if (node.details.status === 'high-load') {
             node.group = 'host-high-load'
+          } else if (node.details.status === 'offline') {
+            node.group = 'host-offline'
           } else {
             node.group = 'host'
           }
@@ -135,18 +138,22 @@ function setupWebSocket() {
           const bandwidth = edge.details?.bandwidth_capacity || 100
           const utilization = (lData.bw / bandwidth) * 100
           
+          // Cập nhật thông số
           edge.label = `${lData.bw.toFixed(1)} Mbps`
           edge.utilization = utilization
-          edge.status = 'up'
           
-          if (edge.details) {
-            edge.details.current_throughput = lData.bw
-            edge.details.utilization = utilization
+          // [QUAN TRỌNG] Lấy status từ Backend gửi xuống
+          // (Backend ở bước 2 mục trước đã gửi lData['status'])
+          if (lData.status) {
+             edge.status = lData.status
+             if (edge.details) edge.details.status = lData.status
+          } else {
+             // Fallback nếu backend chưa gửi kịp
+             edge.status = 'up'
           }
         }
       })
     }
-
     // 3. Cập nhật Switches (Heartbeat)
     if (batchData.switches && Array.isArray(batchData.switches)) {
       batchData.switches.forEach(sName => {
@@ -157,8 +164,10 @@ function setupWebSocket() {
         if (nodeIndex !== -1) {
           const node = networkData.value.graph_data.nodes[nodeIndex]
           if (node.details) {
+            // Heartbeat nhận được -> chắc chắn là UP
             node.details.status = 'up'
           }
+          // Reset group về switch thường (nếu trước đó bị offline)
           node.group = 'switch'
         }
       })

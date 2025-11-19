@@ -21,37 +21,35 @@ def get_host_cpu_usage(host):
     return round(cpu_usage, 2)
 
 def get_host_memory_usage(host):
-    """
-    Lấy % Memory sử dụng.
-    """
+    """Lấy % Memory sử dụng."""
     try:
-        cmd_result = host.cmd('free -m | grep Mem')
+        cmd_result = host.cmd('free -m') # Bỏ grep để lấy full output dễ debug
         
-        if not cmd_result.strip():
-            return 30.0 
-        
-        parts = re.split(r'\s+', cmd_result.strip())
-        
-        if len(parts) < 3:
-            return 30.0
-        
-        mem_total = float(parts[1])
-        mem_used = float(parts[2])
-        
-        if mem_total == 0:
-            return 30.0
-        
-        # Giả lập memory riêng cho từng host
-        host_id = int(host.name.replace('h', '').replace('s', ''))
-        offset = (host_id * 5) % 20
-        
-        simulated_mem = 30 + offset + random.uniform(-5, 10)
-        simulated_mem = max(10, min(90, simulated_mem))
-        
-        return round(simulated_mem, 2)
-        
+        # Tìm dòng chứa "Mem:"
+        for line in cmd_result.splitlines():
+            if "Mem:" in line:
+                # Dùng regex để tách số liệu chính xác hơn split() thường
+                # Tìm tất cả các chuỗi số trong dòng
+                numbers = re.findall(r'\d+', line)
+                
+                if len(numbers) >= 2:
+                    mem_total = float(numbers[0])
+                    mem_used = float(numbers[1]) # Trong 'free' output, cột 2 là used
+                    
+                    if mem_total == 0: return 30.0
+                    
+                    # --- Logic giả lập (Giữ nguyên) ---
+                    host_id_str = re.findall(r'\d+', host.name)
+                    host_id = int(host_id_str[0]) if host_id_str else 1
+                    offset = (host_id * 5) % 20
+                    
+                    simulated_mem = 30 + offset + random.uniform(-5, 10)
+                    return round(max(10, min(90, simulated_mem)), 2)
+
+        return 30.0 # Fallback nếu không tìm thấy dòng Mem
+
     except Exception as e:
-        logger.error(f"[Lỗi] get_host_memory_usage({host.name}): {e}")
+        logger.error(f"[Lỗi Memory] {host.name}: {e}")
         return 30.0
 
 def get_interface_bytes(host, interface_name):
