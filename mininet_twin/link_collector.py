@@ -4,48 +4,78 @@ import collector
 
 def collect_link_metrics(net, link_byte_counters, sync_interval):
     """
-    Thu thập metrics cho tất cả các Link TRÊN CẠNH (edge links) của mạng.
+     Quét TẤT CẢ các Link (Host-Switch VÀ Switch-Switch)
     """
-    
     link_metrics = {}
     
-    
-    for host in net.hosts:
-        # host.intfs là một dictionary, ví dụ { 0: h1-eth0 }
-        # Lấy interface đầu tiên (không phải 'lo')
-        for intf in host.intfs.values():
-            if intf.name == 'lo':
-                continue
-                
-            # Tìm Link
-            link = intf.link
-            if not link:
-                continue
-                
-            # Tìm 2 node của link
-            node1 = link.intf1.node
-            node2 = link.intf2.node
-            link_id = "-".join(sorted([node1.name, node2.name]))
+    # Lặp qua tất cả các đường dây trong mạng
+    for link in net.links:
+        node1 = link.intf1.node
+        node2 = link.intf2.node
+        
+        # Tạo ID 
+        link_id = "-".join(sorted([node1.name, node2.name]))
+        
+        target_node = None
+        target_intf = None
+        
+        
+        if 'h' in node1.name: 
+            target_node = node1
+            target_intf = link.intf1.name
+        elif 'h' in node2.name:
+            target_node = node2
+            target_intf = link.intf2.name
+        else:
+            target_node = node1
+            target_intf = link.intf1.name
 
-            #  Lấy số bytes (chỉ từ phía Host)
-            # Chúng ta không cần đo 2 chiều, vì tx(h1) == rx(s1)
-            # và rx(h1) == tx(s1).
-            current_rx, current_tx = collector.get_interface_bytes(host, intf.name)
-            
-            # Lấy giá trị cũ
-            (prev_rx, prev_tx) = link_byte_counters.get(link_id, (0, 0))
+        if not target_node: continue
 
-            # Tính toán
-            delta_bytes = (current_rx - prev_rx) + (current_tx - prev_tx)
-            delta_bytes = max(0, delta_bytes) # Tránh số âm khi reset
-            
-            throughput_bps = delta_bytes / sync_interval
-            throughput_mbps = round((throughput_bps * 8) / 1_000_000, 2)
+        rx, tx = get_switch_interface_bytes(target_node, target_intf)
+        
+        # Tính toán Bandwidth (Mbps)
+        (prev_rx, prev_tx) = link_byte_counters.get(link_id, (0, 0))
+        
+        delta_bytes = (rx - prev_rx) + (tx - prev_tx)
+        delta_bytes = max(0, delta_bytes) # Tránh âm
+        
+        # Cập nhật bộ nhớ đếm (chỉ update nếu có dữ liệu mới hợp lệ)
+        if prev_rx > 0 or loop_count_check(link_byte_counters): 
+             link_byte_counters[link_id] = (rx, tx)
+        else:
+             # Lần đầu tiên chạy, chưa tính delta, chỉ lưu lại
+             link_byte_counters[link_id] = (rx, tx)
+             delta_bytes = 0
 
-            #  Lưu kết quả và bộ nhớ
-            link_metrics[link_id] = throughput_mbps
-            link_byte_counters[link_id] = (current_rx, current_tx)
-            
-            break 
-            
+        throughput_mbps = round((delta_bytes * 8) / (sync_interval * 1_000_000), 2)
+        link_metrics[link_id] = throughput_mbps
+
     return link_metrics
+
+def get_switch_interface_bytes(node, interface_name):
+    """
+    Đọc thông số từ interface của Switch (thường nằm ở root namespace).
+    Sử dụng lệnh cat /proc/net/dev hệ thống.
+    """
+    try:
+        # Switch trong Mininet thường chạy ở root namespace, 
+        # ta có thể đọc trực tiếp file hệ thống hoặc dùng node.cmd
+        cmd_result = node.cmd(f'cat /proc/net/dev | grep "{interface_name}:"')
+        
+        if not cmd_result.strip():
+            return 0, 0
+            
+        line = cmd_result.strip()
+        stats = line.split(':')[1].strip()
+        parts = re.split(r'\s+', stats)
+        
+        # Cột 0: RX bytes, Cột 8: TX bytes
+        return int(parts[0]), int(parts[8])
+    except Exception as e:
+        # print(f"[Warn] Không đọc được interface {interface_name} trên {node.name}")
+        return 0, 0
+    
+def loop_count_check(counters):
+    # check xem dictionary có dữ liệu chưa
+    return len(counters) > 0

@@ -1,5 +1,6 @@
 import time
 import sys
+import random
 import os
 import socketio
 import logging
@@ -87,6 +88,38 @@ def push_topology_http(net):
     except Exception as e:
         logger.error(f" Lỗi gửi Topology: {e}")
         return False
+    
+# Tao luu luong
+def generate_random_traffic(net):
+    """
+    Tạo traffic ngẫu nhiên để mô phỏng mạng thật đang hoạt động sôi nổi.
+    """
+    while True:
+        try:
+            # 1. Chọn ngẫu nhiên cặp Host (Src -> Dst)
+            src, dst = random.sample(net.hosts, 2)
+            
+            # 2. Random băng thông để tạo hiệu ứng đổi màu (Visual effects)
+            # < 50Mbps: Xanh, 70Mbps: Cam, >90Mbps: Đỏ
+            bw_options = [5, 10, 20, 50, 80, 120] 
+            bandwidth = random.choice(bw_options)
+            
+            # 3. Random thời gian chạy (ngắn thôi để thay đổi liên tục)
+            duration = random.randint(2, 5)
+            
+            logger.info(f"⚡ [Traffic] {src.name} -> {dst.name} : {bandwidth}Mbps trong {duration}s")
+            
+            # 4. Chạy lệnh iPerf (UDP)
+            # -b: băng thông, -t: thời gian, -u: udp
+            cmd = f'iperf -c {dst.IP()} -u -b {bandwidth}M -t {duration} &'
+            src.cmd(cmd)
+            
+            # 5. Nghỉ một chút trước khi tạo luồng tiếp theo
+            time.sleep(random.uniform(0.5, 2.0))
+            
+        except Exception as e:
+            logger.error(f"Lỗi tạo traffic: {e}")
+            time.sleep(1)
 
 def start_iperf_traffic(net):
     """
