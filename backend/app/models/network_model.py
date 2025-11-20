@@ -25,14 +25,15 @@ class NetworkModel:
         print(f"Khởi tạo NetworkModel: {self.name}")
 
     
-    def update_path_metrics(self, src, dst, latency, loss):
+    def update_path_metrics(self, src, dst, latency, loss, jitter=0.0): # Thêm tham số jitter
         path_id = f"{src}-{dst}"
         
         self.paths[path_id] = {
             "source": src,
             "destination": dst,
             "latency": latency,
-            "packet_loss": loss, # Lưu thêm Loss vào Model
+            "packet_loss": loss,
+            "jitter": jitter,     # <--- Lưu Jitter vào đây
             "last_updated": datetime.now().isoformat()
         }
 

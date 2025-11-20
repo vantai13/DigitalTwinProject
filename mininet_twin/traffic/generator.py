@@ -41,13 +41,17 @@ class TrafficGenerator:
                 
                 # Gửi lệnh tạo traffic (Client -> Server)
                 cmd = f'iperf -c {dst.IP()} -u -b {bandwidth}M -t {duration} &'
-                src.cmd(cmd)
+                if hasattr(src, 'lock'):
+                    with src.lock:
+                        src.cmd(cmd)
+                else:
+                    src.cmd(cmd)
                 
                 # Nghỉ ngẫu nhiên trước khi tạo luồng tiếp theo
                 time.sleep(random.uniform(0.5, 2.0))
                 
             except Exception as e:
-                logger.error(f"Lỗi trong vòng lặp traffic: {e}")
+                logger.error(f"Lỗi trong vòng lặp traffic: {e}", exc_info=True)
                 time.sleep(1)
 
     def start(self):

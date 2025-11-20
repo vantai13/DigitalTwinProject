@@ -1,9 +1,11 @@
 import time
 import sys
+import threading
 
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSKernelSwitch
 from mininet.link import TCLink
+
 
 from utils.logger import setup_logger
 from core.topo import ConfigTopo
@@ -86,6 +88,7 @@ def run_simulation():
             
             # Host Metrics
             for h in net.hosts:
+                h.lock = threading.Lock()
                 telemetry_batch["hosts"].append({
                     "name": h.name,
                     "cpu": host_stats.get_host_cpu_usage(h),
@@ -114,7 +117,8 @@ def run_simulation():
                 telemetry_batch["latency"].append({
                     "pair": pair_id,
                     "latency": metrics['latency'], # Tên key rõ ràng hơn
-                    "loss": metrics['loss']        # Thêm Packet Loss
+                    "loss": metrics['loss'],
+                    "jitter": metrics['jitter']        # Thêm Packet Loss
                 })
 
             # --- Log & Gửi dữ liệu ---

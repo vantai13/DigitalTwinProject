@@ -71,6 +71,7 @@ def register_socket_events(socketio):
                     pair_id = item.get('pair')
                     latency_val = item.get('latency')
                     loss_val = item.get('loss', 0.0) # Mặc định 0 nếu thiếu
+                    jitter_val = item.get('jitter', 0.0)
                     
                     if pair_id:
                         parts = pair_id.split('-')
@@ -78,7 +79,7 @@ def register_socket_events(socketio):
                             src, dst = parts[0], parts[1]
                             
                             # Cập nhật vào Model với cả 2 thông số
-                            digital_twin.update_path_metrics(src, dst, latency_val, loss_val)
+                            digital_twin.update_path_metrics(src, dst, latency_val, loss_val, jitter_val)
             
         # Broadcast (phát lại) dữ liệu đã xử lý cho Frontend vẽ biểu đồ
         socketio.emit('network_batch_update', data)
