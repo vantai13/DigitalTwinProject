@@ -17,10 +17,25 @@ class NetworkModel:
         self.switches = {}
         
         self.links = {}
+
+        # [MỚI] Kho chứa dữ liệu độ trễ các cặp Host (Path Metrics)
+        # Key: "h1-h2", Value: { latency: 0.5, timestamp: ... }
+        self.paths = {}
         
         print(f"Khởi tạo NetworkModel: {self.name}")
 
     
+    def update_path_metrics(self, src, dst, latency, loss):
+        path_id = f"{src}-{dst}"
+        
+        self.paths[path_id] = {
+            "source": src,
+            "destination": dst,
+            "latency": latency,
+            "packet_loss": loss, # Lưu thêm Loss vào Model
+            "last_updated": datetime.now().isoformat()
+        }
+
     def add_host(self, name, ip_address, mac_address):
         if name in self.hosts:
             print(f"[Lỗi] Host '{name}' đã tồn tại.")
@@ -128,6 +143,7 @@ class NetworkModel:
             'graph_data': {
                 'nodes': nodes_for_graph,
                 'edges': edges_for_graph
-            }
+            },
+            'path_metrics': self.paths
         }
         return snapshot

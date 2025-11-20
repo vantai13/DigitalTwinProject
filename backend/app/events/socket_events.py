@@ -63,6 +63,22 @@ def register_socket_events(socketio):
                 switch = digital_twin.get_switch(s_name)
                 if switch:
                     switch.heartbeat()
+
+            # 3. Xử lý Path Metrics (Latency + Loss)
+            # Dữ liệu nhận được: [{"pair": "h1-h2", "latency": 45.2, "loss": 0}, ...]
+            if 'latency' in data:
+                for item in data['latency']:
+                    pair_id = item.get('pair')
+                    latency_val = item.get('latency')
+                    loss_val = item.get('loss', 0.0) # Mặc định 0 nếu thiếu
+                    
+                    if pair_id:
+                        parts = pair_id.split('-')
+                        if len(parts) == 2:
+                            src, dst = parts[0], parts[1]
+                            
+                            # Cập nhật vào Model với cả 2 thông số
+                            digital_twin.update_path_metrics(src, dst, latency_val, loss_val)
             
         # Broadcast (phát lại) dữ liệu đã xử lý cho Frontend vẽ biểu đồ
         socketio.emit('network_batch_update', data)

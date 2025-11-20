@@ -103,14 +103,18 @@ def run_simulation():
             for lid, throughput in current_link_metrics.items():
                 telemetry_batch["links"].append({"id": lid, "bw": throughput})
 
-            # Latency Metrics
-            latency_data = network_stats.measure_latency(net)
+           
+           # Latency & Loss Metrics
+            # Gọi hàm mới đã sửa ở Bước 1
+            path_data = network_stats.measure_path_metrics(net)
             
             # Đóng gói vào telemetry
-            for pair_id, lat_val in latency_data.items():
+            # Chúng ta sẽ gửi một list các object chứa cả latency và loss
+            for pair_id, metrics in path_data.items():
                 telemetry_batch["latency"].append({
                     "pair": pair_id,
-                    "val": lat_val
+                    "latency": metrics['latency'], # Tên key rõ ràng hơn
+                    "loss": metrics['loss']        # Thêm Packet Loss
                 })
 
             # --- Log & Gửi dữ liệu ---
