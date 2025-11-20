@@ -9,6 +9,7 @@ from utils.logger import setup_logger
 from core.topo import ConfigTopo
 from collectors import host_stats
 from collectors import link_stats
+from collectors import network_stats
 from services.api_client import TopologyApiClient
 from services.socket_client import SocketClient
 from traffic.generator import TrafficGenerator
@@ -78,7 +79,8 @@ def run_simulation():
             telemetry_batch = {
                 "hosts": [],
                 "links": [],
-                "switches": []
+                "switches": [],
+                "latency": []
             }
 
             
@@ -100,6 +102,16 @@ def run_simulation():
             )
             for lid, throughput in current_link_metrics.items():
                 telemetry_batch["links"].append({"id": lid, "bw": throughput})
+
+            # Latency Metrics
+            latency_data = network_stats.measure_latency(net)
+            
+            # Đóng gói vào telemetry
+            for pair_id, lat_val in latency_data.items():
+                telemetry_batch["latency"].append({
+                    "pair": pair_id,
+                    "val": lat_val
+                })
 
             # --- Log & Gửi dữ liệu ---
             
