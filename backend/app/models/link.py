@@ -44,6 +44,10 @@ class Link:
         self.current_throughput = throughput
         self.latency = latency
         self.jitter = jitter
+
+        if throughput <= 0.01:  # Ngưỡng rất nhỏ để tránh lỗi làm tròn
+            self.set_status('down')
+            return
         
         #  Tự quyết định trạng thái tại đây ---
         utilization = self.get_utilization()

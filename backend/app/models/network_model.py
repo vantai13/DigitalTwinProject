@@ -101,12 +101,20 @@ class NetworkModel:
         # 'edges'
         edges_for_graph = []
         for link in json_links:
+            # [FIX] Nếu link offline/down, không hiển thị throughput
+            if link['status'] in ['down', 'offline', 'unknown']:
+                label = 'DOWN' if link['status'] == 'down' else 'OFFLINE'
+                utilization = 0.0
+            else:
+                label = f"{link['current_throughput']:.1f} Mbps"
+                utilization = link['utilization']
+            
             edges_for_graph.append({
                 'id': link['id'],
                 'from': link['node1'],
                 'to': link['node2'],
-                'label': f"{link['current_throughput']:.1f} Mbps",
-                'utilization': link['utilization'],
+                'label': label,
+                'utilization': utilization,
                 'status': link['status'],
                 'details': link
             })

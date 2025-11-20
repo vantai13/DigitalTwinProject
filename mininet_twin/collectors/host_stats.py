@@ -14,7 +14,7 @@ def get_host_cpu_usage(host):
     except Exception:
         num_processes = 0
 
-    base_cpu = min(20, num_processes * 1.5)
+    base_cpu = min(100, num_processes * 1.5)
     cpu_usage = base_cpu + random.uniform(-10, 20)
     cpu_usage = max(0, min(100, cpu_usage))
     

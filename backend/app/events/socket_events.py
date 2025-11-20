@@ -35,9 +35,15 @@ def register_socket_events(socketio):
             for h_data in data.get('hosts', []):
                 host = digital_twin.get_host(h_data['name'])
                 if host:
+                    # [FIX] Kiểm tra nếu host đang offline thì broadcast update
+                    was_offline = (host.status == 'offline')
                     host.set_status('up') 
                     host.update_resource_metrics(h_data['cpu'], h_data['mem'])
                     h_data['status'] = host.status
+                    
+                    # [FIX] Nếu host vừa được hồi sinh từ offline, broadcast riêng
+                    if was_offline:
+                        socketio.emit('host_updated', host.to_json())
 
             #  Cập nhật Links
             for l_data in data.get('links', []):

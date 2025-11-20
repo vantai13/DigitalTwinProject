@@ -12,7 +12,6 @@ if __name__ == '__main__':
     print(f"WebSocket URL: ws://0.0.0.0:5000")
     print("="*50 + "\n")
     
-    
     socketio.run(
         app,
         host='0.0.0.0',

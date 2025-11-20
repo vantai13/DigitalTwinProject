@@ -40,10 +40,13 @@ def init_topology():
 
         # Thêm tất cả Links
         for link_data in data.get('links', []):
+            bandwidth_capacity = link_data.get('bandwidth', 100)
+            if bandwidth_capacity <= 0: 
+                bandwidth_capacity = 100
             digital_twin.add_link(
                 link_data['node1'],
                 link_data['node2'],
-                link_data.get('bandwidth', 100)
+                bandwidth_capacity
             )
 
         logger.info(f">>> 'Mồi' topology thành công: {len(digital_twin.hosts)} hosts, {len(digital_twin.switches)} switches")
