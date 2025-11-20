@@ -31,7 +31,7 @@ def register_socket_events(socketio):
         Nhận gói tin tổng hợp từ Mininet và cập nhật Digital Twin.
         """
         with data_lock:
-            # 1. Cập nhật Hosts
+            #  Cập nhật Hosts
             for h_data in data.get('hosts', []):
                 host = digital_twin.get_host(h_data['name'])
                 if host:
@@ -39,7 +39,7 @@ def register_socket_events(socketio):
                     host.update_resource_metrics(h_data['cpu'], h_data['mem'])
                     h_data['status'] = host.status
 
-            # 2. Cập nhật Links
+            #  Cập nhật Links
             for l_data in data.get('links', []):
                 parts = l_data['id'].split('-')
                 if len(parts) == 2:
@@ -52,7 +52,7 @@ def register_socket_events(socketio):
                         link.update_performance_metrics(l_data['bw'], 0) 
                         l_data['status'] = link.status
 
-            # 3. Cập nhật Switches (Heartbeat)
+            #  Cập nhật Switches (Heartbeat)
             for s_name in data.get('switches', []):
                 switch = digital_twin.get_switch(s_name)
                 if switch:
@@ -61,4 +61,4 @@ def register_socket_events(socketio):
         # Broadcast (phát lại) dữ liệu đã xử lý cho Frontend vẽ biểu đồ
         socketio.emit('network_batch_update', data)
         
-        # logger.info(f"Đã nhận telemetry từ Mininet: {len(data['hosts'])} hosts")
+        logger.info(f"Đã nhận telemetry từ Mininet: {len(data['hosts'])} hosts")

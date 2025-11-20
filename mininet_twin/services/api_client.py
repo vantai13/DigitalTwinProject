@@ -4,6 +4,9 @@ from utils.logger import setup_logger
 logger = setup_logger()
 
 class TopologyApiClient:
+    """
+    HTTP
+    """
     def __init__(self, base_url):
         self.base_url = base_url
 
@@ -15,7 +18,7 @@ class TopologyApiClient:
         
         topology_data = { "hosts": [], "switches": [], "links": [] }
         
-        # 1. Hosts
+        # Hosts
         for h in net.hosts:
             topology_data["hosts"].append({
                 "name": h.name,
@@ -23,19 +26,19 @@ class TopologyApiClient:
                 "mac": h.MAC()
             })
         
-        # 2. Switches
+        # Switches
         for s in net.switches:
             topology_data["switches"].append({
                 "name": s.name,
                 "dpid": s.dpid
             })
         
-        # 3. Links
+        #  Links
         processed = set() # Set để tránh gửi trùng lặp 2 chiều của 1 dây
         for link in net.links:
             n1, n2 = link.intf1.node.name, link.intf2.node.name
             
-            # Tạo ID duy nhất bằng cách sort tên
+            # Tạo ID duy nhất
             lid = "-".join(sorted([n1, n2]))
             
             if lid not in processed:

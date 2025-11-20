@@ -1,12 +1,11 @@
-# backend/app/api/topology.py
+
 from flask import Blueprint, jsonify, request
 import json
-from app.extensions import digital_twin, socketio  # Import từ kho hàng chung
+from app.extensions import digital_twin, socketio
 from app.utils.logger import get_logger
 
 logger = get_logger()
 
-# Tạo Blueprint tên là 'topology'
 topology_bp = Blueprint('topology', __name__)
 
 @topology_bp.route('/init/topology', methods=['POST'])

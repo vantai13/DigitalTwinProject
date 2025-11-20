@@ -14,8 +14,8 @@ def get_host_cpu_usage(host):
     except Exception:
         num_processes = 0
 
-    base_cpu = min(15, num_processes * 0.5)
-    cpu_usage = base_cpu + random.uniform(-3, 8)
+    base_cpu = min(20, num_processes * 1.5)
+    cpu_usage = base_cpu + random.uniform(-10, 20)
     cpu_usage = max(0, min(100, cpu_usage))
     
     return round(cpu_usage, 2)
@@ -23,13 +23,12 @@ def get_host_cpu_usage(host):
 def get_host_memory_usage(host):
     """Lấy % Memory sử dụng."""
     try:
-        cmd_result = host.cmd('free -m') # Bỏ grep để lấy full output dễ debug
+        cmd_result = host.cmd('free -m') 
         
-        # Tìm dòng chứa "Mem:"
+        
         for line in cmd_result.splitlines():
             if "Mem:" in line:
-                # Dùng regex để tách số liệu chính xác hơn split() thường
-                # Tìm tất cả các chuỗi số trong dòng
+
                 numbers = re.findall(r'\d+', line)
                 
                 if len(numbers) >= 2:
@@ -38,7 +37,6 @@ def get_host_memory_usage(host):
                     
                     if mem_total == 0: return 30.0
                     
-                    # --- Logic giả lập (Giữ nguyên) ---
                     host_id_str = re.findall(r'\d+', host.name)
                     host_id = int(host_id_str[0]) if host_id_str else 1
                     offset = (host_id * 5) % 20
@@ -46,7 +44,7 @@ def get_host_memory_usage(host):
                     simulated_mem = 30 + offset + random.uniform(-5, 10)
                     return round(max(10, min(90, simulated_mem)), 2)
 
-        return 30.0 # Fallback nếu không tìm thấy dòng Mem
+        return 30.0 
 
     except Exception as e:
         logger.error(f"[Lỗi Memory] {host.name}: {e}")

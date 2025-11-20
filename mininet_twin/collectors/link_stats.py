@@ -2,7 +2,7 @@ import re
 
 def collect_link_metrics(net, link_byte_counters, sync_interval):
     """
-    Quét TẤT CẢ các Link (Host-Switch VÀ Switch-Switch)
+    Thu thập dữ liệu các link
     """
     link_metrics = {}
     
@@ -31,7 +31,6 @@ def collect_link_metrics(net, link_byte_counters, sync_interval):
 
         rx, tx = get_switch_interface_bytes(target_node, target_intf)
         
-        # --- [FIX LỖI CAO VỌT] ---
         # Chỉ tính toán nếu link_id ĐÃ CÓ trong bộ đếm từ lần trước
         if link_id in link_byte_counters:
             (prev_rx, prev_tx) = link_byte_counters[link_id]
@@ -51,7 +50,6 @@ def collect_link_metrics(net, link_byte_counters, sync_interval):
         # Cập nhật số liệu mới nhất
         link_byte_counters[link_id] = (rx, tx)
 
-        # --- [FIX LỖI CHIA CHO 0] ---
         if sync_interval > 0:
             throughput_mbps = round((delta_bytes * 8) / (sync_interval * 1_000_000), 2)
         else:

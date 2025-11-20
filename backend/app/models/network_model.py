@@ -43,8 +43,6 @@ class NetworkModel:
 
     def add_link(self, node1_name, node2_name, bandwidth_capacity=100.0):
         link_id = "-".join(sorted([node1_name, node2_name]))
-        
-        
         if link_id  in self.links:
             print(f"[Lỗi] Link giữa '{node1_name}' và '{node2_name}' đã tồn tại.")
             return None
@@ -100,7 +98,7 @@ class NetworkModel:
                 'details': switch
             })
             
-        # 'edges' chính là 'links'
+        # 'edges'
         edges_for_graph = []
         for link in json_links:
             edges_for_graph.append({

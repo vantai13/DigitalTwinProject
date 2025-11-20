@@ -7,7 +7,7 @@ logger = get_logger()
 
 device_bp = Blueprint('device_updates', __name__)
 
-# --- Helper Functions để broadcast (copy từ app.py cũ) ---
+# Dùng để cập nhập từng thiết bị riêng lẻ, có thẻ dùng sau này 
 def broadcast_host_update(host_obj):
     socketio.emit('host_updated', host_obj.to_json())
 

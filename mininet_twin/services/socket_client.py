@@ -4,6 +4,9 @@ from utils.logger import setup_logger
 logger = setup_logger()
 
 class SocketClient:
+    """
+    Websocket
+    """
     def __init__(self, server_url):
         self.server_url = server_url
         self.sio = socketio.Client()

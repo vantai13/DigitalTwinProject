@@ -9,7 +9,6 @@ class TrafficGenerator:
     def __init__(self, net):
         """
         Khởi tạo bộ sinh lưu lượng.
-        :param net: Đối tượng mạng Mininet
         """
         self.net = net
         self.running = False

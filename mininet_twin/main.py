@@ -5,7 +5,6 @@ from mininet.net import Mininet
 from mininet.node import RemoteController, OVSKernelSwitch
 from mininet.link import TCLink
 
-# --- IMPORTS CÁC MODULE ĐÃ TÁCH ---
 from utils.logger import setup_logger
 from core.topo import ConfigTopo
 from collectors import host_stats
@@ -14,7 +13,7 @@ from services.api_client import TopologyApiClient
 from services.socket_client import SocketClient
 from traffic.generator import TrafficGenerator
 
-# --- CẤU HÌNH ---
+
 API_BASE_URL = "http://localhost:5000/api"
 SOCKET_URL = "http://localhost:5000"
 SYNC_INTERVAL = 1.0 
@@ -27,22 +26,22 @@ api_client = TopologyApiClient(API_BASE_URL)
 socket_client = SocketClient(SOCKET_URL)
 
 def run_simulation():
-    # 1. Khởi tạo Mininet
+    #  Khởi tạo Mininet
     logger.info(" Khởi tạo mạng Mininet...")
     topo = ConfigTopo()
     net = Mininet(topo=topo, switch=OVSKernelSwitch)
     net.start()
     logger.info(f" Mininet started with {len(net.hosts)} hosts, {len(net.switches)} switches")
 
-    # 2. Khởi tạo Traffic Generator
+    #  Khởi tạo Traffic Generator
     traffic_gen = TrafficGenerator(net)
 
-    # 3. Kết nối WebSocket
+    #  Kết nối WebSocket
     if not socket_client.connect():
         net.stop()
         return
 
-    # 4. Gửi Topology
+    #  Gửi Topology
     if not api_client.push_topology(net):
         logger.error(" Không thể gửi topology, dừng chương trình")
         net.stop()
@@ -50,10 +49,10 @@ def run_simulation():
     
     time.sleep(2) # Đợi backend xử lý
 
-    # 5. Bắt đầu sinh Traffic
+    #  Bắt đầu sinh Traffic
     traffic_gen.start()
 
-    # 6. Vòng lặp chính (Thu thập & Gửi dữ liệu)
+    #  Vòng lặp chính (Thu thập & Gửi dữ liệu)
     logger.info("=" * 70)
     logger.info(" BẮT ĐẦU VÒNG LẶP THU THẬP DỮ LIỆU")
     logger.info("=" * 70)
@@ -64,7 +63,7 @@ def run_simulation():
     try:
         while True:
             loop_count += 1
-            loop_start_time = time.monotonic() # Dùng monotonic cho sleep
+            loop_start_time = time.monotonic() 
             
             # Tính thời gian thực trôi qua
             current_time = time.monotonic()
@@ -82,7 +81,6 @@ def run_simulation():
                 "switches": []
             }
 
-            # --- Thu thập Metrics ---
             
             # Host Metrics
             for h in net.hosts:

@@ -7,7 +7,7 @@ from app.utils.logger import get_logger
 
 logger = get_logger()
 
-# --- Helper Functions để broadcast (Viết lại gọn ở đây để dùng nội bộ) ---
+# --- Helper Functions để broadcast  --
 def broadcast_update(event_name, data_json):
     try:
         socketio.emit(event_name, data_json)
@@ -26,7 +26,7 @@ def check_device_status_loop():
                 now = datetime.now()
                 timeout_threshold = timedelta(seconds=TIMEOUT_SECONDS)
 
-                # 1. Kiểm tra Hosts
+                #  Kiểm tra Hosts
                 for host in digital_twin.hosts.values():
                     if host.last_update_time:
                         if (now - host.last_update_time) > timeout_threshold:
@@ -35,7 +35,7 @@ def check_device_status_loop():
                                 host.set_status('offline')
                                 broadcast_update('host_updated', host.to_json())
 
-                # 2. Kiểm tra Switches
+                #  Kiểm tra Switches
                 for switch in digital_twin.switches.values():
                     if switch.last_update_time:
                         if (now - switch.last_update_time) > timeout_threshold:
@@ -44,7 +44,7 @@ def check_device_status_loop():
                                 switch.set_status('offline')
                                 broadcast_update('switch_updated', switch.to_json())
 
-                # 3. Kiểm tra Links
+                #  Kiểm tra Links
                 for link in digital_twin.links.values():
                     if link.last_update_time:
                         if (now - link.last_update_time) > timeout_threshold:
