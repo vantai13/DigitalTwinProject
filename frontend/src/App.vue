@@ -75,12 +75,35 @@ function setupWebSocket() {
   })
 
   // [FIXED] Nhận topology ban đầu
-  socket.on('initial_state', (data) => {
-    console.log('📦 Received initial topology:', data)
-    networkData.value = data
-    isLoading.value = false
-    lastUpdateTime.value = new Date().toISOString()
-  })
+socket.on('initial_state', (data) => {
+  console.log('📦 Received initial topology:', data)
+  
+  // [FIX] Xử lý trường hợp nodes/links offline khi nhận initial_state
+  if (data && data.graph_data) {
+    // Đảm bảo nodes có group đúng dựa trên status
+    data.graph_data.nodes.forEach(node => {
+      if (node.details && node.details.status === 'offline') {
+        if (node.group && node.group.startsWith('host')) {
+          node.group = 'host-offline'
+        } else if (node.group && node.group.startsWith('switch')) {
+          node.group = 'switch-offline'
+        }
+      }
+    })
+    
+    // Đảm bảo edges có label đúng khi offline
+    data.graph_data.edges.forEach(edge => {
+      if (edge.status === 'down' || edge.status === 'offline') {
+        edge.label = 'DOWN'
+        edge.utilization = 0
+      }
+    })
+  }
+  
+  networkData.value = data
+  isLoading.value = false
+  lastUpdateTime.value = new Date().toISOString()
+})
 
   // [FIXED] Xử lý batch update từ Mininet
   socket.on('network_batch_update', (batchData) => {
@@ -104,6 +127,12 @@ function setupWebSocket() {
         
         if (nodeIndex !== -1) {
           const node = networkData.value.graph_data.nodes[nodeIndex]
+
+          if (node.group && !node.group.startsWith('host')) {
+            // Nếu node bị gán nhầm là switch, sửa lại
+            node.group = 'host'
+          }
+
           
           // Merge dữ liệu mới
           node.details = {
@@ -127,7 +156,7 @@ function setupWebSocket() {
     }
 
     // 2. Cập nhật Links
-    if (batchData.links && Array.isArray(batchData.links)) {
+   if (batchData.links && Array.isArray(batchData.links)) {
       batchData.links.forEach(lData => {
         const edgeIndex = networkData.value.graph_data.edges.findIndex(
           e => e.id === lData.id
@@ -136,20 +165,31 @@ function setupWebSocket() {
         if (edgeIndex !== -1) {
           const edge = networkData.value.graph_data.edges[edgeIndex]
           const bandwidth = edge.details?.bandwidth_capacity || 100
-          const utilization = (lData.bw / bandwidth) * 100
           
-          // Cập nhật thông số
-          edge.label = `${lData.bw.toFixed(1)} Mbps`
-          edge.utilization = utilization
-          
-          // [QUAN TRỌNG] Lấy status từ Backend gửi xuống
-          // (Backend ở bước 2 mục trước đã gửi lData['status'])
-          if (lData.status) {
-             edge.status = lData.status
-             if (edge.details) edge.details.status = lData.status
+          // [FIX] Nếu bandwidth = 0 hoặc rất nhỏ, đánh dấu là down
+          if (lData.bw <= 0.01) {
+            edge.label = 'DOWN'
+            edge.utilization = 0
+            edge.status = 'down'
+            if (edge.details) {
+              edge.details.status = 'down'
+              edge.details.current_throughput = 0
+            }
           } else {
-             // Fallback nếu backend chưa gửi kịp
-             edge.status = 'up'
+            const utilization = (lData.bw / bandwidth) * 100
+            
+            // Cập nhật thông số
+            edge.label = `${lData.bw.toFixed(1)} Mbps`
+            edge.utilization = utilization
+            
+            // [QUAN TRỌNG] Lấy status từ Backend gửi xuống
+            if (lData.status) {
+              edge.status = lData.status
+              if (edge.details) edge.details.status = lData.status
+            } else {
+              // Fallback nếu backend chưa gửi kịp
+              edge.status = 'up'
+            }
           }
         }
       })

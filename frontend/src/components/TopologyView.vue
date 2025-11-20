@@ -31,13 +31,13 @@ function processEdges(edges) {
     let isDashed = false
     let shadowConfig = { enabled: false }
     
-    // Lấy status từ Backend gửi xuống
-    // (Lưu ý: data từ backend có thể nằm trong edge hoặc edge.details tùy cách bạn gán ở App.vue)
+        // Lấy status từ Backend gửi xuống
     const status = edge.status || edge.details?.status || 'unknown'
     const utilization = edge.utilization || 0
-    // if (utilization > 1 && (status === 'down' || status === 'offline' || status === 'unknown')) {
-    //     status = 'up'; 
-    // }
+    const throughput = edge.details?.current_throughput || 0
+    
+    // [FIX] Nếu throughput = 0, đánh dấu là down
+    const finalStatus = (throughput <= 0.01) ? 'down' : status
 
     // --- [LOGIC HIỂN THỊ DỰA TRÊN TRẠNG THÁI] ---
     switch (status) {
@@ -72,14 +72,14 @@ function processEdges(edges) {
     // Animation arrows (Giữ nguyên logic hiển thị mũi tên khi có traffic)
     let arrowsConfig = { to: { enabled: false } }
     if (status !== 'down' && utilization > 1) {
-      let arrowSpeed = 1
-      if (status === 'high-load') arrowSpeed = 2.5
-      else if (status === 'warning') arrowSpeed = 1.5
+      // let arrowSpeed = 1
+      // if (status === 'high-load') arrowSpeed = 2.5
+      // else if (status === 'warning') arrowSpeed = 1.5
       
-      arrowsConfig = {
-        to: { enabled: true, type: 'arrow', scaleFactor: 0.8 },
-        middle: { enabled: true, type: 'arrow', scaleFactor: 0.6 }
-      }
+      // arrowsConfig = {
+      //   to: { enabled: true, type: 'arrow', scaleFactor: 0.8 },
+      //   middle: { enabled: true, type: 'arrow', scaleFactor: 0.6 }
+      // }
     }
 
     return {
@@ -110,17 +110,36 @@ function processNodes(nodes) {
     const status = node.details?.status
     let finalGroup = node.group
 
-    // Xác định group dựa trên status
+    // [FIX] Xác định loại node dựa trên ID, không phải group hiện tại
+    const isHost = node.id && node.id.toLowerCase().startsWith('h')
+    const isSwitch = node.id && node.id.toLowerCase().startsWith('s')
+
+    // [FIX] Xác định group dựa trên loại node (isHost/isSwitch) và status
     if (status === 'offline') {
-      finalGroup = node.group === 'host' ? 'host-offline' : 'switch-offline'
+      if (isHost) {
+        finalGroup = 'host-offline'
+      } else if (isSwitch) {
+        finalGroup = 'switch-offline'
+      }
     } else if (status === 'high-load') {
-      finalGroup = node.group === 'host' ? 'host-high-load' : 'switch-high-load'
+      // [FIX] Quan trọng: Dựa vào isHost, không phải node.group
+      if (isHost) {
+        finalGroup = 'host-high-load'
+      } else if (isSwitch) {
+        finalGroup = 'switch-high-load'
+      }
+    } else {
+      // [FIX] Đảm bảo group đúng với loại node
+      if (isHost) {
+        finalGroup = 'host'
+      } else if (isSwitch) {
+        finalGroup = 'switch'
+      }
     }
 
     return {
       ...node,
       group: finalGroup,
-      // Add tooltip
       title: `${node.id}\nStatus: ${status || 'unknown'}\n${
         node.details?.cpu_utilization 
           ? `CPU: ${node.details.cpu_utilization}%` 
