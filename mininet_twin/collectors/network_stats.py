@@ -1,85 +1,105 @@
-import re
+import threading
+import time
 import random
+import re
 from utils.logger import setup_logger
 
 logger = setup_logger()
 
+# 1. Biến toàn cục để lưu kết quả đo mới nhất (Shared Memory)
+# Key: "h1-h2", Value: {latency, loss, jitter}
+_metrics_cache = {}
+_cache_lock = threading.Lock()
+_running = False
+
+def parse_ping_output(output):
+    """
+    Phân tích kết quả ping để lấy Latency, Loss và Jitter (mdev).
+    Output mẫu Linux: "rtt min/avg/max/mdev = 0.045/0.058/0.083/0.012 ms"
+    """
+    latency = 0.0
+    loss = 100.0
+    jitter = 0.0
+
+    try:
+        # Lấy Packet Loss
+        loss_match = re.search(r'(\d+)% packet loss', output)
+        if loss_match:
+            loss = float(loss_match.group(1))
+
+        # Lấy Latency (avg) và Jitter (mdev)
+        # mdev (Mean Deviation) chính là chỉ số Jitter chuẩn nhất của Ping
+        rtt_match = re.search(r'rtt min/avg/max/mdev = [\d\.]+/([\d\.]+)/[\d\.]+/([\d\.]+)', output)
+        if rtt_match:
+            latency = float(rtt_match.group(1))
+            jitter = float(rtt_match.group(2))
+            
+    except Exception as e:
+        logger.error(f"Lỗi parse ping: {e}")
+
+    return latency, loss, jitter
+
+def _measurement_loop(net):
+    """Vòng lặp chạy ngầm để đo đạc"""
+    global _running
+    logger.info(">>> Đã khởi động luồng đo Latency/Jitter ngầm...")
+    
+    while _running:
+        try:
+            hosts = net.hosts
+            if len(hosts) < 2:
+                time.sleep(1)
+                continue
+
+            # CHỈNH SỬA: Chỉ đo ngẫu nhiên 2 cặp mỗi lần lặp để giảm tải CPU
+            # Dần dần sẽ phủ hết mạng, không cần đo tất cả cùng lúc
+            pairs_to_measure = []
+            for _ in range(2): 
+                pairs_to_measure.append(random.sample(hosts, 2))
+
+            for h_src, h_dst in pairs_to_measure:
+                pair_id = f"{h_src.name}-{h_dst.name}"
+
+                # KỸ THUẬT TỐI ƯU:
+                # Ping 5 gói (-c 5), giãn cách cực nhanh 0.05s (-i 0.05)
+                # Tổng thời gian đo chỉ mất ~0.25s nhưng có đủ số liệu thống kê
+                cmd = f"ping -c 5 -i 0.05 -W 1 {h_dst.IP()}"
+                
+                output = h_src.cmd(cmd)
+                lat, loss, jit = parse_ping_output(output)
+
+                # Cập nhật vào kho chứa chung
+                with _cache_lock:
+                    _metrics_cache[pair_id] = {
+                        "latency": lat,
+                        "loss": loss,
+                        "jitter": jit
+                    }
+                
+                # Nghỉ nhẹ giữa các lần ping để CPU thở
+                time.sleep(0.1)
+
+            # Nghỉ giữa các vòng đo lớn
+            time.sleep(1.0) 
+
+        except Exception as e:
+            logger.error(f"Lỗi trong luồng đo metrics: {e}")
+            time.sleep(1)
+
+def start_background_measurement(net):
+    """Hàm này được gọi 1 lần duy nhất từ main.py"""
+    global _running
+    if _running: return
+    
+    _running = True
+    t = threading.Thread(target=_measurement_loop, args=(net,), daemon=True)
+    t.start()
+
 def measure_path_metrics(net):
     """
-    Đo Latency, Packet Loss (bằng Ping) và Jitter (bằng Iperf UDP).
-    Trả về: { 'h1-h2': {'latency': 10.5, 'loss': 0, 'jitter': 0.042} }
+    Hàm này được gọi bởi Main Loop mỗi giây.
+    Nó trả về dữ liệu NGAY LẬP TỨC từ bộ nhớ đệm, KHÔNG CHỜ PING.
     """
-    path_metrics = {}
-    
-    # 1. Lấy danh sách cặp host ngẫu nhiên để đo
-    hosts = net.hosts
-    if len(hosts) < 2: return {}
-
-    targets = []
-    # Chọn ngẫu nhiên tối đa 3 cặp để tránh làm chậm hệ thống
-    for _ in range(3):
-         targets.append(random.sample(hosts, 2))
-
-    for h_src, h_dst in targets:
-        pair_id = f"{h_src.name}-{h_dst.name}"
-        metrics = {"latency": -1, "loss": 100, "jitter": -1}
-        
-        # --- PHẦN 1: ĐO LATENCY & LOSS (Dùng PING) ---
-        try:
-            # Ping nhanh: 1 gói, timeout 0.5s
-            cmd_ping = f"ping -c 1 -W 0.5 {h_dst.IP()}"
-            output_ping = ""
-            # [SỬA] Thêm Lock
-            if hasattr(h_src, 'lock'):
-                with h_src.lock:
-                    output_ping = h_src.cmd(cmd_ping)
-            else:
-                output_ping = h_src.cmd(cmd_ping)
-            
-            # Parse Latency
-            lat_match = re.search(r'time=([\d\.]+)', output_ping)
-            if lat_match:
-                metrics["latency"] = float(lat_match.group(1))
-            
-            # Parse Loss
-            loss_match = re.search(r'(\d+)% packet loss', output_ping)
-            if loss_match:
-                metrics["loss"] = float(loss_match.group(1))
-                
-        except Exception as e:
-            logger.error(f"[Ping Error] {pair_id}: {e}")
-
-        # --- PHẦN 2: ĐO JITTER (Dùng IPERF UDP) ---
-        # Chỉ đo Jitter nếu kết nối Ping thông (Loss < 100)
-        if metrics["loss"] < 100:
-            try:
-                # Iperf Client: Gửi UDP (-u), băng thông nhỏ 1M (-b 1M), thời gian cực ngắn 0.5s (-t 0.5)
-                # format output csv (-y C) để dễ parse: timestamp,src_ip,port,dst_ip,port,id,interval,transferred,bandwidth,jitter,errors...
-                # Tuy nhiên format chuẩn (mặc định) thường dễ debug hơn với người mới. Ta dùng format mặc định.
-                
-                cmd_iperf = f"iperf -c {h_dst.IP()} -u -t 0.5 -b 1M"
-                output_iperf = ""
-                # [SỬA] Thêm Lock
-                if hasattr(h_src, 'lock'):
-                    with h_src.lock:
-                        output_iperf = h_src.cmd(cmd_iperf)
-                else:
-                    output_iperf = h_src.cmd(cmd_iperf)
-                
-                # Output mẫu của Iperf UDP Client khi kết thúc:
-                # [  3]  0.0- 0.5 sec  64.0 KBytes  1.05 Mbits/sec   0.042 ms    0/   45 (0%)
-                # Chúng ta cần tìm con số đứng trước "ms"
-                
-                # Regex tìm: số chấm động + khoảng trắng + ms
-                jitter_match = re.search(r'([\d\.]+)\s+ms', output_iperf)
-                if jitter_match:
-                    metrics["jitter"] = float(jitter_match.group(1))
-                else:
-                    metrics["jitter"] = 0.0 # Không bắt được thì coi như 0
-                    
-            except Exception as e:
-                logger.error(f"[Iperf Error] {pair_id}: {e}")
-        
-        path_metrics[pair_id] = metrics
-
-    return path_metrics
+    with _cache_lock:
+        # Trả về bản sao để tránh lỗi xung đột dữ liệu
+        return _metrics_cache.copy()

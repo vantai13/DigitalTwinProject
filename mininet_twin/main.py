@@ -60,6 +60,8 @@ def run_simulation():
     #  Bắt đầu sinh Traffic
     traffic_gen.start()
 
+    network_stats.start_background_measurement(net)
+
     #  Vòng lặp chính (Thu thập & Gửi dữ liệu)
     logger.info("=" * 70)
     logger.info(" BẮT ĐẦU VÒNG LẶP THU THẬP DỮ LIỆU")
