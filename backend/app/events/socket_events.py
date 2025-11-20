@@ -58,11 +58,23 @@ def register_socket_events(socketio):
                         link.update_performance_metrics(l_data['bw'], 0) 
                         l_data['status'] = link.status
 
-            #  Cập nhật Switches (Heartbeat)
-            for s_name in data.get('switches', []):
+            # 4. Cập nhật Switches
+            # Dữ liệu nhận được: [{"name": "s1", "ports": {...}}, ...]
+            for s_data in data.get('switches', []):
+                # Xử lý trường hợp data cũ (chỉ là string tên switch) hoặc data mới (dict)
+                if isinstance(s_data, str):
+                    s_name = s_data
+                    s_ports = {}
+                else:
+                    s_name = s_data.get('name')
+                    s_ports = s_data.get('ports', {})
+
                 switch = digital_twin.get_switch(s_name)
                 if switch:
                     switch.heartbeat()
+                    # [MỚI] Cập nhật thống kê port
+                    if s_ports:
+                        switch.update_port_stats(s_ports)
 
             # 3. Xử lý Path Metrics (Latency + Loss)
             # Dữ liệu nhận được: [{"pair": "h1-h2", "latency": 45.2, "loss": 0}, ...]

@@ -23,6 +23,10 @@ class Switch:
         # Mỗi "flow" có thể là một dictionary mô tả nó.
         self.flow_table = [] 
 
+        # [MỚI] Kho chứa thống kê từng port
+        # Key: "s1-eth1", Value: {rx_packets: 100, dropped: 0...}
+        self.port_stats = {}
+
     def set_status(self, new_status):
         if new_status in ['up', 'unknown', 'offline', 'high-load']:
             self.status = new_status
@@ -41,6 +45,21 @@ class Switch:
     def update_ports(self, port_list):
         self.port_list = port_list
         print(f"[{self.name}] Đã cập nhật cổng: {self.port_list}")
+    
+    def update_port_stats(self, stats_data):
+        """
+        stats_data: Dictionary chứa thông tin các port từ Mininet gửi lên
+        """
+        self.last_update_time = datetime.now()
+        if self.status != 'up':
+            self.set_status('up')
+            
+        self.port_stats = stats_data
+        
+        # Logic phân tích đơn giản (Ví dụ)
+        total_dropped = sum(p['dropped'] for p in self.port_stats.values())
+        if total_dropped > 100: # Ngưỡng ví dụ
+            print(f"[Cảnh báo] Switch {self.name} đang bị rớt gói: {total_dropped}")
 
     def heartbeat(self):
         self.last_update_time = datetime.now()
@@ -67,5 +86,6 @@ class Switch:
             'dpid': self.dpid,
             'status': self.status,
             'ports': self.port_list,
+            'port_stats': self.port_stats,
             'flow_count': len(self.flow_table)
         }

@@ -12,6 +12,7 @@ from core.topo import ConfigTopo
 from collectors import host_stats
 from collectors import link_stats
 from collectors import network_stats
+from collectors import switch_stats
 from services.api_client import TopologyApiClient
 from services.socket_client import SocketClient
 from traffic.generator import TrafficGenerator
@@ -35,6 +36,10 @@ def run_simulation():
     net = Mininet(topo=topo, switch=OVSKernelSwitch)
     net.start()
     logger.info(f" Mininet started with {len(net.hosts)} hosts, {len(net.switches)} switches")
+   
+   # tạo khóa 
+    for h in net.hosts:
+        h.lock = threading.Lock()
 
     #  Khởi tạo Traffic Generator
     traffic_gen = TrafficGenerator(net)
@@ -88,7 +93,6 @@ def run_simulation():
             
             # Host Metrics
             for h in net.hosts:
-                h.lock = threading.Lock()
                 telemetry_batch["hosts"].append({
                     "name": h.name,
                     "cpu": host_stats.get_host_cpu_usage(h),
@@ -96,8 +100,21 @@ def run_simulation():
                 })
 
             # Switch Metrics (Heartbeat)
-            for s in net.switches:
-                telemetry_batch["switches"].append(s.name)
+            switch_data_collected = switch_stats.collect_switch_port_stats(net)
+            
+            # Đóng gói vào telemetry
+            # Cấu trúc gửi lên: "switches": [ {"name": "s1", "ports": {...}}, ... ]
+            telemetry_batch["switches"] = [] # Reset list cũ
+            for sw in net.switches:
+                s_name = sw.name
+                s_stats = switch_data_collected.get(s_name, {})
+                
+                telemetry_batch["switches"].append({
+                    "name": s_name,
+                    "ports": s_stats # Gửi kèm thống kê port
+                })
+
+            
 
             # Link Metrics
             current_link_metrics = link_stats.collect_link_metrics(
