@@ -1,4 +1,5 @@
 # backend/app/events/socket_events.py
+from sqlite3.dbapi2 import Timestamp
 from flask import request
 from flask_socketio import emit
 from app.extensions import digital_twin, data_lock # Import kho hàng chung
@@ -31,12 +32,17 @@ def register_socket_events(socketio):
         Nhận gói tin tổng hợp từ Mininet và cập nhật Digital Twin.
         """
         with data_lock:
+
+            batch_timestamp = data.get('timestamp')
+
             for h_data in data.get('hosts', []):
                 host = digital_twin.get_host(h_data['name'])
                 if host:
                     was_offline = (host.status == 'offline')
                     host.set_status('up') 
-                    host.update_resource_metrics(h_data['cpu'], h_data['mem'])
+
+                    host.update_resource_metrics(h_data['cpu'], h_data['mem'], timestamp=batch_timestamp)
+
                     h_data['status'] = host.status
                     
                     if was_offline:
@@ -51,7 +57,7 @@ def register_socket_events(socketio):
                         if link.status in ['down', 'offline', 'unknown']:
                             link.set_status('up')
                     
-                        link.update_performance_metrics(l_data['bw'], 0) 
+                        link.update_performance_metrics(l_data['bw'], 0, timestamp=batch_timestamp) 
                         l_data['status'] = link.status
 
 
@@ -65,12 +71,10 @@ def register_socket_events(socketio):
 
                 switch = digital_twin.get_switch(s_name)
                 if switch:
-                    switch.heartbeat()
+                    switch.heartbeat(timestamp=batch_timestamp)
                     if s_ports:
-                        switch.update_port_stats(s_ports)
+                        switch.update_port_stats(s_ports, timestamp=batch_timestamp)
 
-            # 3. Xử lý Path Metrics (Latency + Loss)
-            # Dữ liệu nhận được: [{"pair": "h1-h2", "latency": 45.2, "loss": 0}, ...]
             
             for item in data.get('latency', []):
                 pair_id = item.get('pair')

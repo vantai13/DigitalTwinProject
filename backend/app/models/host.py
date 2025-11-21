@@ -33,10 +33,14 @@ class Host:
         else:
             print(f"[Lỗi] Trạng thái '{new_status}' không hợp lệ cho {self.name}.")
 
-    def update_resource_metrics(self, cpu, memory):
+    def update_resource_metrics(self, cpu, memory, timestamp=None):
         self.cpu_utilization = cpu
         self.memory_usage = memory
-        self.last_update_time = datetime.now()
+
+        if timestamp: 
+            self.last_update_time = datetime.fromtimestamp(timestamp)
+        else : 
+            self.last_update_time = datetime.now()
 
         if self.status == 'offline':
              self.set_status('up')

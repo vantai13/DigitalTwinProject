@@ -44,11 +44,15 @@ class Switch:
         self.port_list = port_list
         print(f"[{self.name}] Đã cập nhật cổng: {self.port_list}")
     
-    def update_port_stats(self, stats_data):
+    def update_port_stats(self, stats_data, timestamp = None):
         """
         stats_data: Dictionary chứa thông tin các port từ Mininet gửi lên
         """
-        self.last_update_time = datetime.now()
+        if timestamp:
+            self.last_update_time = datetime.fromtimestamp(timestamp)
+        else:
+            self.last_update_time = datetime.now()
+
         if self.status != 'up':
             self.set_status('up')
 
@@ -66,8 +70,12 @@ class Switch:
         if total_dropped > 100:
             print(f"[Cảnh báo] Switch {self.name} đang bị rớt gói: {total_dropped}")
 
-    def heartbeat(self):
-        self.last_update_time = datetime.now()
+    def heartbeat(self, timestamp = None):
+        if timestamp:
+            self.last_update_time = datetime.fromtimestamp(timestamp)
+        else:
+            self.last_update_time = datetime.now()
+
         if self.status in ['offline', 'unknown']:
             self.set_status('up')
 

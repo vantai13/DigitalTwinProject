@@ -88,7 +88,10 @@ def run_simulation():
                 
             last_check_time = current_time
             
+            current_timestamp = time.time()
+
             telemetry_batch = {
+                "timestamp": current_timestamp,
                 "hosts": [],
                 "links": [],
                 "switches": [],

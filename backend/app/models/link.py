@@ -36,11 +36,15 @@ class Link:
             self.status = new_status
         
 
-    def update_performance_metrics(self, throughput, latency=0.0, jitter=0.0):
+    def update_performance_metrics(self, throughput, latency=0.0, jitter=0.0, timestamp = None):
         """
         Cập nhật các số liệu hiệu năng (dữ liệu từ iPerf!).
         """
-        self.last_update_time = datetime.now()
+        if timestamp: 
+            self.last_update_time = datetime.fromtimestamp(timestamp)
+        else: 
+            self.last_update_time = datetime.now()
+
         self.current_throughput = throughput
         self.latency = latency
         self.jitter = jitter
