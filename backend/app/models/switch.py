@@ -15,7 +15,6 @@ class Switch:
         self.last_update_time = None
         
         # Danh sách các cổng (ports) mà switch này đang kết nối
-        # Chúng ta có thể lưu tên của các interface (ví dụ: 's1-eth1', 's1-eth2')
         self.port_list = []
         
         # Bảng luồng (Flow Table)
@@ -24,7 +23,6 @@ class Switch:
         self.flow_table = [] 
 
         # [MỚI] Kho chứa thống kê từng port
-        # Key: "s1-eth1", Value: {rx_packets: 100, dropped: 0...}
         self.port_stats = {}
 
     def set_status(self, new_status):
@@ -56,9 +54,9 @@ class Switch:
             
         self.port_stats = stats_data
         
-        # Logic phân tích đơn giản (Ví dụ)
+
         total_dropped = sum(p['dropped'] for p in self.port_stats.values())
-        if total_dropped > 100: # Ngưỡng ví dụ
+        if total_dropped > 100:
             print(f"[Cảnh báo] Switch {self.name} đang bị rớt gói: {total_dropped}")
 
     def heartbeat(self):

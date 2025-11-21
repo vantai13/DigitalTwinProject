@@ -62,6 +62,9 @@ def run_simulation():
 
     network_stats.start_background_measurement(net)
 
+    logger.info("Đang làm nóng hệ thống (Warm-up 3s) để thu thập metrics đầu tiên...")
+    time.sleep(3.0) 
+
     #  Vòng lặp chính (Thu thập & Gửi dữ liệu)
     logger.info("=" * 70)
     logger.info(" BẮT ĐẦU VÒNG LẶP THU THẬP DỮ LIỆU")
@@ -104,16 +107,15 @@ def run_simulation():
             # Switch Metrics (Heartbeat)
             switch_data_collected = switch_stats.collect_switch_port_stats(net)
             
-            # Đóng gói vào telemetry
-            # Cấu trúc gửi lên: "switches": [ {"name": "s1", "ports": {...}}, ... ]
-            telemetry_batch["switches"] = [] # Reset list cũ
+
+            telemetry_batch["switches"] = [] 
             for sw in net.switches:
                 s_name = sw.name
                 s_stats = switch_data_collected.get(s_name, {})
                 
                 telemetry_batch["switches"].append({
                     "name": s_name,
-                    "ports": s_stats # Gửi kèm thống kê port
+                    "ports": s_stats 
                 })
 
             
@@ -127,17 +129,14 @@ def run_simulation():
 
            
            # Latency & Loss Metrics
-            # Gọi hàm mới đã sửa ở Bước 1
             path_data = network_stats.measure_path_metrics(net)
-            
-            # Đóng gói vào telemetry
-            # Chúng ta sẽ gửi một list các object chứa cả latency và loss
+
             for pair_id, metrics in path_data.items():
                 telemetry_batch["latency"].append({
                     "pair": pair_id,
-                    "latency": metrics['latency'], # Tên key rõ ràng hơn
+                    "latency": metrics['latency'],
                     "loss": metrics['loss'],
-                    "jitter": metrics['jitter']        # Thêm Packet Loss
+                    "jitter": metrics['jitter']      
                 })
 
             # --- Log & Gửi dữ liệu ---
@@ -163,6 +162,7 @@ def run_simulation():
     finally:
         logger.info(" Dọn dẹp tài nguyên...")
         
+        network_stats.stop_background_measurement()
         traffic_gen.stop()       # Dừng traffic
         socket_client.disconnect() # Ngắt kết nối socket
         net.stop()               # Dừng Mininet

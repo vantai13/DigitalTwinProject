@@ -18,14 +18,12 @@ class NetworkModel:
         
         self.links = {}
 
-        # [MỚI] Kho chứa dữ liệu độ trễ các cặp Host (Path Metrics)
-        # Key: "h1-h2", Value: { latency: 0.5, timestamp: ... }
         self.paths = {}
         
         print(f"Khởi tạo NetworkModel: {self.name}")
 
     
-    def update_path_metrics(self, src, dst, latency, loss, jitter=0.0): # Thêm tham số jitter
+    def update_path_metrics(self, src, dst, latency, loss, jitter=0.0): 
         path_id = f"{src}-{dst}"
         
         self.paths[path_id] = {
@@ -33,7 +31,7 @@ class NetworkModel:
             "destination": dst,
             "latency": latency,
             "packet_loss": loss,
-            "jitter": jitter,     # <--- Lưu Jitter vào đây
+            "jitter": jitter,     
             "last_updated": datetime.now().isoformat()
         }
 
@@ -88,10 +86,6 @@ class NetworkModel:
         return list(self.hosts.values()) + list(self.switches.values())
 
     def get_network_snapshot(self):
-        """
-        Tạo một "ảnh chụp nhanh" (snapshot) toàn bộ mạng.
-        Đây là dữ liệu JSON bạn sẽ gửi cho Dashboard!
-        """
         
         json_hosts = [host.to_json() for host in self.hosts.values()]
         json_switches = [switch.to_json() for switch in self.switches.values()]
@@ -117,7 +111,6 @@ class NetworkModel:
         # 'edges'
         edges_for_graph = []
         for link in json_links:
-            # [FIX] Nếu link offline/down, không hiển thị throughput
             if link['status'] in ['down', 'offline', 'unknown']:
                 label = 'DOWN' if link['status'] == 'down' else 'OFFLINE'
                 utilization = 0.0

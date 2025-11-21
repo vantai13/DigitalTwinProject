@@ -21,7 +21,7 @@ def create_app():
     # Quan trọng: Gắn socketio vào app tại đây
     socketio.init_app(app, async_mode='threading', cors_allowed_origins="*")
 
-    #  Đăng ký Blueprints (REST API)
+
     # Mọi route trong topology_bp sẽ có prefix /api 
     app.register_blueprint(topology_bp, url_prefix='/api')
     app.register_blueprint(device_bp, url_prefix='/api')

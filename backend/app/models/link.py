@@ -2,8 +2,8 @@
 from datetime import datetime
 class Link:
 
-    THRESHOLD_WARNING = 70.0  # > 70% là cảnh báo (Cam)
-    THRESHOLD_CRITICAL = 90.0 # > 90% là nguy hiểm (Đỏ)
+    THRESHOLD_WARNING = 70.0  
+    THRESHOLD_CRITICAL = 90.0 
 
     def __init__(self, node1, node2, bandwidth_capacity):
         """
@@ -12,11 +12,11 @@ class Link:
             bandwidth_capacity (float): Băng thông tối đa (dung lượng)
                                         của link (tính bằng Mbps).
         """
-        # Chúng ta tạo một ID duy nhất cho link để dễ dàng tham chiếu
+
         self.id = "-".join(sorted([node1, node2]))
         self.node1 = node1
         self.node2 = node2
-        self.bandwidth_capacity = bandwidth_capacity  # (Mbps)
+        self.bandwidth_capacity = bandwidth_capacity  
 
         
         self.status = 'unknown'  
@@ -49,7 +49,7 @@ class Link:
             self.set_status('down')
             return
         
-        #  Tự quyết định trạng thái tại đây ---
+
         utilization = self.get_utilization()
         
         if utilization >= self.THRESHOLD_CRITICAL:

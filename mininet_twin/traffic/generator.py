@@ -31,6 +31,17 @@ class TrafficGenerator:
             try:
                 # Chọn ngẫu nhiên cặp Host (Src -> Dst)
                 src, dst = random.sample(self.net.hosts, 2)
+
+                # KIỂM TRA HOST TRƯỚC KHI SỬ DỤNG
+                if not hasattr(src, 'shell') or src.shell is None:
+                    logger.warning(f"Host {src.name} không có shell hợp lệ, bỏ qua...")
+                    time.sleep(1)
+                    continue
+                    
+                if getattr(src, 'waiting', False):
+                    logger.warning(f"Host {src.name} đang busy, bỏ qua...")
+                    time.sleep(0.5)
+                    continue
                 
                 # Random băng thông và thời gian
                 bw_options = [5, 10, 20, 50, 80, 120] 
@@ -41,11 +52,25 @@ class TrafficGenerator:
                 
                 # Gửi lệnh tạo traffic (Client -> Server)
                 cmd = f'iperf -c {dst.IP()} -u -b {bandwidth}M -t {duration} &'
-                if hasattr(src, 'lock'):
-                    with src.lock:
-                        src.cmd(cmd)
-                else:
-                    src.cmd(cmd)
+
+                try:
+                    if hasattr(src, 'lock'):
+                        with src.lock:
+                            # KIỂM TRA LẠI TRƯỚC KHI THỰC THI
+                            if src.shell and not getattr(src, 'waiting', False):
+                                result = src.cmd(cmd)
+                            else:
+                                logger.warning(f"Host {src.name} không sẵn sàng, bỏ qua lệnh")
+                    else:
+                        # KIỂM TRA TRƯỚC KHI THỰC THI
+                        if src.shell and not getattr(src, 'waiting', False):
+                            result = src.cmd(cmd)
+                        else:
+                            logger.warning(f"Host {src.name} không sẵn sàng, bỏ qua lệnh")
+                            
+                except Exception as cmd_error:
+                    logger.error(f"Lỗi thực thi lệnh trên {src.name}: {cmd_error}")
+                    continue
                 
                 # Nghỉ ngẫu nhiên trước khi tạo luồng tiếp theo
                 time.sleep(random.uniform(0.5, 2.0))
@@ -73,10 +98,14 @@ class TrafficGenerator:
         self.running = False
         
         if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=1.0)
+            self.thread.join(timeout=2.0)
             
         # Dọn dẹp các tiến trình iperf còn sót lại
         for h in self.net.hosts:
-            h.cmd('killall iperf 2>/dev/null')
+            try:
+                if hasattr(h, 'shell') and h.shell:
+                    h.cmd('killall iperf 2>/dev/null')
+            except Exception as e:
+                logger.warning(f"Không thể dọn dẹp iperf trên {h.name}: {e}")
         
-        logger.info(" Đã dọn dẹp iPerf.")
+        logger.info(" Đãf dọn dẹp iPer.")
