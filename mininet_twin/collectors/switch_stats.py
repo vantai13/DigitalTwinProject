@@ -54,6 +54,8 @@ def collect_switch_port_stats(net):
                 if port_match:
                     current_port = port_match.group(1)
                     switch_metrics[sw_name][current_port] = {
+                        "switch_name": sw_name,  
+                        "port_name": current_port,
                         "rx_packets": 0, "tx_packets": 0,
                         "rx_bytes": 0, "tx_bytes": 0,
                         "dropped": 0, "errors": 0

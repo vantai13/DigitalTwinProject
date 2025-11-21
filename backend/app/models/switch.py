@@ -51,6 +51,13 @@ class Switch:
         self.last_update_time = datetime.now()
         if self.status != 'up':
             self.set_status('up')
+
+        # Tự động cập nhật port_list từ port_stats
+        self.port_list = list(stats_data.keys())
+        
+        for port_name, stats in stats_data.items():
+            stats['owner_switch'] = self.name
+            stats['full_port_id'] = f"{self.name}:{port_name}"
             
         self.port_stats = stats_data
         
@@ -67,6 +74,24 @@ class Switch:
         if self.status != 'up':
             self.set_status('up')
 
+    def get_port_summary(self):
+        """
+        Trả về thông tin tóm tắt về các port
+        """
+        if not self.port_stats:
+            return {"total_ports": 0, "active_ports": [], "total_traffic": 0}
+            
+        total_rx = sum(stats['rx_bytes'] for stats in self.port_stats.values())
+        total_tx = sum(stats['tx_bytes'] for stats in self.port_stats.values())
+        total_traffic = total_rx + total_tx
+        
+        return {
+            "total_ports": len(self.port_stats),
+            "active_ports": list(self.port_stats.keys()),
+            "total_traffic_bytes": total_traffic,
+            "total_traffic_mb": round(total_traffic / (1024*1024), 2)
+        }
+
     def get_info(self):
         print("--- Thông tin Switch ---")
         print(f"  Tên    : {self.name}")
@@ -79,11 +104,14 @@ class Switch:
     
 
     def to_json(self):
+        # Đảm bảo ports luôn đồng bộ với port_stats
+        active_ports = list(self.port_stats.keys()) if self.port_stats else self.port_list
+        
         return {
             'name': self.name,
             'dpid': self.dpid,
             'status': self.status,
-            'ports': self.port_list,
+            'ports': active_ports,
             'port_stats': self.port_stats,
             'flow_count': len(self.flow_table)
         }
