@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # --- SERVICE 1: INFLUXDB ---
+  influxdb:
+    image: influxdb:2.7
+    container_name: digital_twin_influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=password123456
+      - DOCKER_INFLUXDB_INIT_ORG=digitaltwin_org
+      - DOCKER_INFLUXDB_INIT_BUCKET=network_metrics
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+      - influxdb-config:/etc/influxdb2
+    networks:
+      - dt_network
+
+  # --- SERVICE 2: GRAFANA ---
+  grafana:
+    image: grafana/grafana:latest
+    container_name: digital_twin_grafana
+    user: "0"                               # chạy bằng root → tránh lỗi permission
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - influxdb
+    volumes:
+      - grafana-storage:/var/lib/grafana    # dùng Docker Volume → không lỗi permission
+    networks:
+      - dt_network
+
+# Volumes nội bộ của Docker → chạy ổn định trên WSL2
+volumes:
+  influxdb-data:
+  influxdb-config:
+  grafana-storage:
+
+# Mạng
+networks:
+  dt_network:
+    driver: bridge
