@@ -4,6 +4,7 @@ from flask import request
 from flask_socketio import emit
 from app.extensions import digital_twin, data_lock # Import kho hàng chung
 from app.utils.logger import get_logger
+from app.services.influx_service import influx_service
 
 logger = get_logger()
 
@@ -31,6 +32,12 @@ def register_socket_events(socketio):
         """
         Nhận gói tin tổng hợp từ Mininet và cập nhật Digital Twin.
         """
+
+        # ---------------------------------------------------------
+        # [MỚI] GHI VÀO DATABASE (Chạy song song, không ảnh hưởng logic dưới)
+        # ---------------------------------------------------------
+        influx_service.write_telemetry_batch(data)
+        
         with data_lock:
 
             batch_timestamp = data.get('timestamp')
