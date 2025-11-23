@@ -66,20 +66,30 @@ def _measurement_loop(net):
                 if _stop_event.is_set(): break 
 
                 pair_id = f"{h_src.name}-{h_dst.name}"
-                
-                
                 cmd = f"ping -c 1 -W 0.2 {h_dst.IP()}" 
-                output = h_src.cmd(cmd)
-                lat, loss, jit = parse_ping_output(output)
-
-                with _cache_lock:
-                    _metrics_cache[pair_id] = {
-                        "latency": lat,
-                        "loss": loss,
-                        "jitter": jit
-                    }
                 
-                time.sleep(0.1)
+                output = ""
+                try:
+                    # [FIX] Thêm Lock ở đây cực kỳ quan trọng
+                    # Vì lệnh Ping rất dễ bị nhiễu bởi iPerf
+                    if hasattr(h_src, 'lock'):
+                        with h_src.lock:
+                            output = h_src.cmd(cmd)
+                    else:
+                        output = h_src.cmd(cmd)
+                    
+                    lat, loss, jit = parse_ping_output(output)
+                    
+                    with _cache_lock:
+                        _metrics_cache[pair_id] = {
+                            "latency": lat,
+                            "loss": loss,
+                            "jitter": jit
+                        }
+
+                except Exception as e:
+                    logger.error(f"Lỗi luồng đo metrics ({pair_id}): {str(e)}")
+                    time.sleep(0.1)
 
             time.sleep(1.0) 
 

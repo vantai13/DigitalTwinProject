@@ -9,8 +9,16 @@ def get_host_cpu_usage(host):
     Lấy % CPU sử dụng cho Mininet host.
     """
     try:
-        ps_output = host.cmd("ps aux | wc -l").strip()
-        num_processes = int(ps_output) if ps_output.isdigit() else 0
+        # [FIX] Dùng lock nếu có
+        cmd = "ps aux | wc -l"
+        output = ""
+        if hasattr(host, 'lock'):
+            with host.lock:
+                output = host.cmd(cmd).strip()
+        else:
+            output = host.cmd(cmd).strip()
+            
+        num_processes = int(output) if output.isdigit() else 0
     except Exception:
         num_processes = 0
 
@@ -23,7 +31,13 @@ def get_host_cpu_usage(host):
 def get_host_memory_usage(host):
     """Lấy % Memory sử dụng."""
     try:
-        cmd_result = host.cmd('free -m') 
+        # [FIX] Dùng lock để tránh xung đột với Traffic Generator
+        cmd_result = ""
+        if hasattr(host, 'lock'):
+            with host.lock:
+                cmd_result = host.cmd('free -m')
+        else:
+            cmd_result = host.cmd('free -m')
         
         
         for line in cmd_result.splitlines():

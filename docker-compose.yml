@@ -30,6 +30,9 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_DASHBOARDS_MIN_REFRESH_INTERVAL=500ms   # ← Dòng này mở khóa 500ms
+      - GF_DASHBOARDS_DEFAULT_REFRESH=1s
+
     depends_on:
       - influxdb
     volumes:

@@ -1,4 +1,4 @@
-# backend/app/events/socket_events.py
+import threading
 from sqlite3.dbapi2 import Timestamp
 from flask import request
 from flask_socketio import emit
@@ -33,10 +33,16 @@ def register_socket_events(socketio):
         Nhận gói tin tổng hợp từ Mininet và cập nhật Digital Twin.
         """
 
-        # ---------------------------------------------------------
-        # [MỚI] GHI VÀO DATABASE (Chạy song song, không ảnh hưởng logic dưới)
-        # ---------------------------------------------------------
-        influx_service.write_telemetry_batch(data)
+        # [FIX] Chạy ghi DB trong luồng riêng để không chặn SocketIO Heartbeat
+        def write_db_task():
+            try:
+                influx_service.write_telemetry_batch(data)
+            except Exception as e:
+                logger.error(f"Lỗi ghi InfluxDB background: {e}")
+
+        # Khởi động thread ghi DB
+        db_thread = threading.Thread(target=write_db_task, daemon=True)
+        db_thread.start()
         
         with data_lock:
 

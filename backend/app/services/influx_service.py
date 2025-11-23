@@ -1,16 +1,14 @@
-# backend/app/services/influx_service.py
-import time
 from influxdb_client import InfluxDBClient, Point, WriteOptions
 from influxdb_client.client.write_api import WriteOptions
 from app.utils.logger import get_logger
 
-logger = get_logger()  # Dùng __name__ để log đẹp hơn
+logger = get_logger()  
 
 
 class InfluxService:
     def __init__(self):
         self.url = "http://localhost:8086"
-        self.token = "my-super-secret-auth-token"        # Phải khớp docker-compose.yml
+        self.token = "my-super-secret-auth-token"   
         self.org = "digitaltwin_org"
         self.bucket = "network_metrics"
 
@@ -35,7 +33,7 @@ class InfluxService:
             return
 
         timestamp_sec = data.get('timestamp', time.time())
-        ts_ns = int(timestamp_sec * 1_000_000_000)  # InfluxDB cần nanosecond
+        ts_ns = int(timestamp_sec * 1_000_000_000)  
 
         points = []
 
