@@ -1,5 +1,6 @@
 from influxdb_client import InfluxDBClient, Point, WriteOptions
 from influxdb_client.client.write_api import WriteOptions
+import time
 from app.utils.logger import get_logger
 
 logger = get_logger()  
