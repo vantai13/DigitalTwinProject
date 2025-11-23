@@ -71,6 +71,8 @@ def run_simulation():
     logger.info("=" * 70)
     
     link_counters = {}
+    # [THAY ĐỔI] Tạo từ điển lưu throughput cũ
+    link_throughput_tracker = {}
     loop_count = 0
     last_check_time = time.monotonic()
     try:
@@ -125,7 +127,7 @@ def run_simulation():
 
             # Link Metrics
             current_link_metrics = link_stats.collect_link_metrics(
-                net, link_counters, real_interval
+                net, link_counters, link_throughput_tracker, real_interval
             )
             for lid, throughput in current_link_metrics.items():
                 telemetry_batch["links"].append({"id": lid, "bw": throughput})

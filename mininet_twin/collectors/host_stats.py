@@ -9,89 +9,67 @@ logger = setup_logger()
 
 def get_host_cpu_usage(host):
     """
-    Lấy % CPU sử dụng cho Mininet host (giả lập an toàn).
+    Lấy % CPU load thực tế (dựa trên Load Average hoặc ps).
+    Lưu ý: Mininet host dùng chung Kernel nên khó tách CPU % chính xác từng host 
+    nếu không dùng cgroups. Cách tốt nhất là dùng 'uptime' để lấy Load Avg chung 
+    hoặc ps để đếm mức độ bận rộn của tiến trình shell.
     """
     try:
-        # Dùng timeout để tránh treo vĩnh viễn nếu ps aux bị kẹt
-        cmd = "timeout 0.2s ps aux | wc -l"
-        output = ""
-
-        if hasattr(host, 'lock'):
-            with host.lock:
-                output = host.cmd(cmd).strip()
-        else:
-            output = host.cmd(cmd).strip()
-
-        # Nếu timeout hoặc lỗi → output sẽ rỗng hoặc chứa "Terminated"
-        if not output or "Terminated" in output:
-            num_processes = 0
-        else:
-            num_processes = int(output) if output.isdigit() else 0
-
-    except Exception as e:
-        logger.debug(f"[CPU] Timeout hoặc lỗi trên {host.name}: {e}")
-        num_processes = 0
-
-    # Logic giả lập cũ của bạn (giữ nguyên để tránh đột ngột giảm CPU về 0)
-    base_cpu = min(100, num_processes * 0.5)
-    cpu_usage = base_cpu + random.uniform(-10, 20)
-    cpu_usage = max(0, min(100, cpu_usage))
-
-    return round(cpu_usage, 2)
-
+        # Cách 1: Lấy Load Average của hệ thống (phản ánh độ nghẽn chung)
+        # cmd = "uptime | awk -F'load average:' '{ print $2 }' | cut -d, -f1"
+        
+        # Cách 2 (Tốt hơn cho bài tập): Tính CPU dựa trên %CPU của tiến trình processes
+        # Lệnh này lấy tổng %CPU của tất cả process thuộc user hiện tại (hoặc trong context)
+        # Tuy nhiên đơn giản nhất là lấy Load Average * 10 (giả lập scale) hoặc parse /proc/stat
+        
+        # Ở đây mình dùng cách lấy Load Average 1 phút, vì nó phản ánh thực tế máy đang gồng gánh thế nào
+        output = host.cmd("cat /proc/loadavg").strip()
+        # Output ví dụ: 0.15 0.08 0.02 1/742 3425
+        parts = output.split()
+        if parts:
+            load_1min = float(parts[0])
+            # Quy đổi Load Avg ra thang 100 (Ví dụ: máy 4 core, load 4.0 = 100%)
+            # Giả sử máy ảo của bạn có 2 vCPU
+            cpu_usage = (load_1min / 2.0) * 100
+            return round(min(100.0, cpu_usage), 2)
+            
+    except Exception:
+        return 0.0
+    
+    return 0.0
 
 def get_host_memory_usage(host):
-    """Lấy % Memory sử dụng (an toàn với timeout)."""
-    cmd_result = ""
-
+    """
+    Lấy % Memory THẬT từ lệnh free -m.
+    Không dùng random nữa.
+    """
     try:
-        # Timeout cực ngắn: nếu free -m treo → bỏ qua ngay
-        cmd = "timeout 0.2s free -m"
-
-        if hasattr(host, 'lock'):
-            with host.lock:
-                cmd_result = host.cmd(cmd)
-        else:
-            cmd_result = host.cmd(cmd)
-
-        # Nếu timeout → cmd_result sẽ rỗng hoặc có từ "Terminated"
-        if not cmd_result or "Terminated" in cmd_result:
-            raise ValueError("free command timeout")
-
-        for line in cmd_result.splitlines():
+        # Chạy lệnh free -m
+        output = host.cmd('free -m')
+        
+        # Parse output
+        #              total        used        free      shared  buff/cache   available
+        # Mem:          7936        1542        4521          13        1872        6124
+        
+        for line in output.splitlines():
             if "Mem:" in line:
-                numbers = re.findall(r'\d+', line)
-                if len(numbers) >= 3:
-                    mem_total = float(numbers[1])   # cột thứ 2 là total
-                    mem_used  = float(numbers[2])   # cột thứ 3 là used (chính xác hơn cũ)
+                # Dùng regex để tách số, xử lý cả khoảng trắng nhiều
+                parts = re.findall(r'\d+', line)
+                if len(parts) >= 2:
+                    total_mem = float(parts[0])
+                    used_mem = float(parts[1])
+                    
+                    if total_mem == 0: return 0.0
+                    
+                    # Tính % thực tế
+                    real_usage = (used_mem / total_mem) * 100
+                    return round(real_usage, 2)
 
-                    if mem_total == 0:
-                        return 30.0
-
-                    real_percent = (mem_used / mem_total) * 100
-
-                    # Vẫn giữ một chút simulate như cũ để đồ thị không bị nhảy quá đột ngột
-                    host_id_str = re.findall(r'\d+', host.name)
-                    host_id = int(host_id_str[0]) if host_id_str else 1
-                    offset = (host_id * 5) % 20
-                    simulated = 30 + offset + random.uniform(-8, 12)
-
-                    # Kết hợp 70% thực + 30% simulate → mượt mà + chính xác
-                    final = 0.7 * real_percent + 0.3 * simulated
-                    return round(max(10, min(95, final)), 2)
-
-        # Không tìm thấy dòng Mem:
-        raise ValueError("No Mem line found")
+        return 0.0 
 
     except Exception as e:
-        logger.debug(f"[Memory] Timeout hoặc lỗi trên {host.name}: {e}")
-        # Fallback: dùng simulate hoàn toàn như cũ
-        host_id_str = re.findall(r'\d+', host.name)
-        host_id = int(host_id_str[0]) if host_id_str else 1
-        offset = (host_id * 5) % 20
-        simulated_mem = 30 + offset + random.uniform(-5, 10)
-        return round(max(10, min(90, simulated_mem)), 2)
-
+        logger.error(f"[Lỗi Memory] {host.name}: {e}")
+        return 0.0
 
 def get_interface_bytes(host, interface_name):
     """
