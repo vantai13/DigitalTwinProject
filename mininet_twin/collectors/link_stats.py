@@ -61,7 +61,18 @@ def collect_link_metrics(net, link_byte_counters, sync_interval):
 
 def get_switch_interface_bytes(node, interface_name):
     try:
-        cmd_result = node.cmd(f'cat /proc/net/dev | grep "{interface_name}:"')
+        # TƯ DUY MỚI: Thêm "timeout 0.2s" vào trước lệnh
+        # Nếu lệnh cat bị treo, Linux sẽ kill nó sau 0.2s, trả về rỗng
+        cmd = f'timeout 0.2s cat /proc/net/dev | grep "{interface_name}:"'
+
+        # [Quan trọng] Sử dụng lock nếu node là Host (để tránh xung đột với Traffic Gen)
+        cmd_result = ""
+        if hasattr(node, 'lock'): 
+             with node.lock:
+                 cmd_result = node.cmd(cmd)
+        else:
+             cmd_result = node.cmd(cmd)
+
         if not cmd_result.strip(): return 0, 0
         
         line = cmd_result.strip()

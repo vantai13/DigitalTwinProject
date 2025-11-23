@@ -40,33 +40,39 @@ def parse_ping_output(output):
     return latency, loss, jitter
 
 def _measurement_loop(net):
-    logger.info(">>> Luồng đo Latency bắt đầu (Round-Robin Mode)...")
+    logger.info(">>> Luồng đo Latency bắt đầu (Random Sampling Mode)...")
     
     # Tạo danh sách tất cả các cặp có thể có (Pair Generator)
     hosts = net.hosts
-    all_pairs = list(itertools.combinations(hosts, 2))
+    MAX_SAMPLES_PER_CYCLE = 10  # CHỈNH SỬA: Giới hạn số cặp đo mỗi vòng lặp
+    # all_pairs = list(itertools.combinations(hosts, 2))
     
 
-    pair_index = 0
-    total_pairs = len(all_pairs)
+    # pair_index = 0
+    # total_pairs = len(all_pairs)
     
     while not _stop_event.is_set():  # vong lap vo tan, den khi co lenh dung
         try:
-            if total_pairs == 0:
+            # Lấy danh sách tất cả hosts
+            host_list = list(hosts)
+            if len(host_list) < 2:
                 time.sleep(1)
                 continue
 
 
+            # TƯ DUY MỚI: Chọn ngẫu nhiên các cặp thay vì duyệt toàn bộ
+            # Tạo danh sách các cặp ngẫu nhiên cho vòng lặp này
             current_batch = []
-            for _ in range(2):
-                current_batch.append(all_pairs[pair_index])
-                pair_index = (pair_index + 1) % total_pairs 
+            for _ in range(MAX_SAMPLES_PER_CYCLE):
+                # Chọn 2 host ngẫu nhiên khác nhau
+                src, dst = random.sample(host_list, 2)
+                current_batch.append((src, dst))
             
             for h_src, h_dst in current_batch:
                 if _stop_event.is_set(): break 
 
                 pair_id = f"{h_src.name}-{h_dst.name}"
-                cmd = f"ping -c 1 -W 0.2 {h_dst.IP()}" 
+                cmd = f"ping -c 1 -W 0.1 {h_dst.IP()}" 
                 
                 output = ""
                 try:

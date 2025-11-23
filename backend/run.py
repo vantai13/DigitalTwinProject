@@ -1,6 +1,8 @@
 # backend/run.py
-from app import create_app, socketio
 
+import eventlet
+eventlet.monkey_patch()
+from app import create_app, socketio
 # Tạo ứng dụng từ Factory
 app = create_app()
 

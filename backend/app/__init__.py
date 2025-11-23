@@ -19,7 +19,7 @@ def create_app():
 
     #  Khởi tạo Extensions với App
     # Quan trọng: Gắn socketio vào app tại đây
-    socketio.init_app(app, async_mode='threading', cors_allowed_origins="*")
+    socketio.init_app(app, async_mode='eventlet', cors_allowed_origins="*")
 
 
     # Mọi route trong topology_bp sẽ có prefix /api 
