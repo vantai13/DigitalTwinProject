@@ -5,8 +5,45 @@ from flask_socketio import emit
 from app.extensions import digital_twin, data_lock # Import kho hàng chung
 from app.utils.logger import get_logger
 from app.services.influx_service import influx_service
+import queue
 
 logger = get_logger()
+
+
+# --- 1. KHỞI TẠO HÀNG ĐỢI (QUEUE) ---
+# Hàng đợi này đóng vai trò "bộ đệm", giúp Mininet gửi bao nhiêu cũng được,
+# Backend sẽ xử lý từ từ mà không bị treo.
+telemetry_queue = queue.Queue()
+
+# --- 2. WORKER THREAD (Người tiêu dùng) ---
+def db_worker():
+    """
+    Hàm này chạy vĩnh viễn trong 1 thread riêng.
+    Nó liên tục lấy dữ liệu từ queue và ghi vào InfluxDB.
+    """
+    logger.info(">>> InfluxDB Worker đã khởi động và đang chờ dữ liệu...")
+    
+    while True:
+        # Lấy dữ liệu từ hàng đợi (sẽ block/đứng chờ tại đây nếu hàng đợi rỗng)
+        data = telemetry_queue.get()
+        
+        if data is None: # Tín hiệu dừng (nếu cần tắt server êm đẹp)
+            break
+            
+        try:
+            # Ghi vào DB (Tác vụ tốn thời gian IO)
+            influx_service.write_telemetry_batch(data)
+        except Exception as e:
+            logger.error(f"Lỗi ghi InfluxDB background: {e}")
+        finally:
+            # Đánh dấu là đã xử lý xong item này
+            telemetry_queue.task_done()
+
+# --- 3. KHỞI ĐỘNG WORKER ---
+# Chỉ chạy 1 lần duy nhất khi file này được import
+# daemon=True nghĩa là thread này sẽ tự chết khi chương trình chính tắt
+worker_thread = threading.Thread(target=db_worker, daemon=True)
+worker_thread.start()
 
 def register_socket_events(socketio):
     """
@@ -33,16 +70,8 @@ def register_socket_events(socketio):
         Nhận gói tin tổng hợp từ Mininet và cập nhật Digital Twin.
         """
 
-        # [FIX] Chạy ghi DB trong luồng riêng để không chặn SocketIO Heartbeat
-        def write_db_task():
-            try:
-                influx_service.write_telemetry_batch(data)
-            except Exception as e:
-                logger.error(f"Lỗi ghi InfluxDB background: {e}")
-
-        # Khởi động thread ghi DB
-        db_thread = threading.Thread(target=write_db_task, daemon=True)
-        db_thread.start()
+        # --- A. Đẩy vào hàng đợi để thread kia xử lý ---
+        telemetry_queue.put(data)
         
         with data_lock:
 

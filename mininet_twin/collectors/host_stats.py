@@ -3,40 +3,87 @@
 import re
 import random
 from utils.logger import setup_logger
+import os 
+import time
 
 logger = setup_logger()
 
+# Dictionary để lưu lần đo trước: { 'h1': {'prev_usage': 12345, 'prev_time': 1600000}, ... }
+_cpu_tracker = {}
 
 def get_host_cpu_usage(host):
     """
-    Lấy % CPU load thực tế (dựa trên Load Average hoặc ps).
-    Lưu ý: Mininet host dùng chung Kernel nên khó tách CPU % chính xác từng host 
-    nếu không dùng cgroups. Cách tốt nhất là dùng 'uptime' để lấy Load Avg chung 
-    hoặc ps để đếm mức độ bận rộn của tiến trình shell.
+    Lấy % CPU usage chính xác dựa trên Cgroups (Linux Control Groups).
+    Yêu cầu Mininet chạy với host=CPULimitedHost.
     """
-    try:
-        # Cách 1: Lấy Load Average của hệ thống (phản ánh độ nghẽn chung)
-        # cmd = "uptime | awk -F'load average:' '{ print $2 }' | cut -d, -f1"
-        
-        # Cách 2 (Tốt hơn cho bài tập): Tính CPU dựa trên %CPU của tiến trình processes
-        # Lệnh này lấy tổng %CPU của tất cả process thuộc user hiện tại (hoặc trong context)
-        # Tuy nhiên đơn giản nhất là lấy Load Average * 10 (giả lập scale) hoặc parse /proc/stat
-        
-        # Ở đây mình dùng cách lấy Load Average 1 phút, vì nó phản ánh thực tế máy đang gồng gánh thế nào
-        output = host.cmd("cat /proc/loadavg").strip()
-        # Output ví dụ: 0.15 0.08 0.02 1/742 3425
-        parts = output.split()
-        if parts:
-            load_1min = float(parts[0])
-            # Quy đổi Load Avg ra thang 100 (Ví dụ: máy 4 core, load 4.0 = 100%)
-            # Giả sử máy ảo của bạn có 2 vCPU
-            cpu_usage = (load_1min / 2.0) * 100
-            return round(min(100.0, cpu_usage), 2)
-            
-    except Exception:
-        return 0.0
+    # 1. Xác định đường dẫn file cpuacct của host này
+    # Trong Mininet, thường nằm ở /sys/fs/cgroup/cpu,cpuacct/<tên_nhóm>/<tên_host>
+    # CPULimitedHost tự động gắn cgroup vào host object
     
-    return 0.0
+    try:
+        # Lấy PID của tiếng trình shell trong host ảo
+        pid = host.pid 
+        
+        # Tìm file cpuacct.usage dựa trên cgroup của PID này
+        # Đây là cách tổng quát nhất để tìm cgroup path
+        cgroup_path = ""
+        with open(f"/proc/{pid}/cgroup", "r") as f:
+            for line in f:
+                if "cpuacct" in line:
+                    # line format: 11:cpu,cpuacct:/mininet/h1
+                    cgroup_path = line.split(":")[2].strip()
+                    break
+        
+        if not cgroup_path:
+            return 0.0
+
+        # Đường dẫn tuyệt đối tới file thống kê
+        base_cgroup = "/sys/fs/cgroup/cpu,cpuacct"
+        usage_file = f"{base_cgroup}{cgroup_path}/cpuacct.usage"
+
+        # Đọc tổng số nanoseconds CPU đã dùng
+        with open(usage_file, "r") as f:
+            current_usage_ns = int(f.read().strip())
+            
+        current_time_ns = time.time_ns() # Thời gian hiện tại (nanoseconds)
+
+        # --- TÍNH TOÁN % ---
+        usage_percent = 0.0
+        
+        if host.name in _cpu_tracker:
+            prev = _cpu_tracker[host.name]
+            delta_usage = current_usage_ns - prev['usage']
+            delta_time = current_time_ns - prev['time']
+            
+            if delta_time > 0:
+                # CPU % = (Thời gian dùng CPU / Tổng thời gian trôi qua) * 100
+                # Lưu ý: Nếu máy có nhiều core, con số này có thể > 100% nếu không chia số core
+                usage_percent = (delta_usage / delta_time) * 100
+        
+        # Cập nhật trạng thái để dùng cho vòng lặp sau
+        _cpu_tracker[host.name] = {
+            'usage': current_usage_ns,
+            'time': current_time_ns
+        }
+
+        return round(usage_percent, 2)
+
+    except FileNotFoundError:
+        # Fallback: Nếu không tìm thấy cgroup (do chưa config CPULimitedHost), dùng cách cũ nhẹ nhàng hơn
+        # Dùng ps để lấy %CPU của tiến trình shell (nhẹ hơn top)
+        try:
+            # Lấy %CPU của chính process host đó
+            cmd = f"ps -p {host.pid} -o %cpu --no-headers"
+            # Chạy lệnh trên máy thật (không phải host.cmd) để tránh overhead
+            output = os.popen(cmd).read().strip()
+            if output:
+                return float(output)
+        except:
+            pass
+        return 0.0
+    except Exception as e:
+        logger.error(f"Lỗi đo CPU {host.name}: {e}")
+        return 0.0
 
 def get_host_memory_usage(host):
     """

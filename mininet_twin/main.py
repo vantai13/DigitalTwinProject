@@ -3,7 +3,7 @@ import sys
 import threading
 
 from mininet.net import Mininet
-from mininet.node import RemoteController, OVSKernelSwitch
+from mininet.node import RemoteController, OVSKernelSwitch, CPULimitedHost
 from mininet.link import TCLink
 
 
@@ -33,7 +33,7 @@ def run_simulation():
     #  Khởi tạo Mininet
     logger.info(" Khởi tạo mạng Mininet...")
     topo = ConfigTopo()
-    net = Mininet(topo=topo, switch=OVSKernelSwitch)
+    net = Mininet(topo=topo, switch=OVSKernelSwitch, host=CPULimitedHost)
     net.start()
     logger.info(f" Mininet started with {len(net.hosts)} hosts, {len(net.switches)} switches")
    

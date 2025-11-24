@@ -9,7 +9,12 @@ class SocketClient:
     """
     def __init__(self, server_url):
         self.server_url = server_url
-        self.sio = socketio.Client()
+        self.sio = socketio.Client(
+            reconnection=True,
+            reconnection_attempts=0,  # Infinite
+            reconnection_delay=1,
+            reconnection_delay_max=5
+        )
         
         # Đăng ký các sự kiện ngay khi khởi tạo
         self._register_events()
