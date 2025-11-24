@@ -1,6 +1,7 @@
 import time
 import sys
 import threading
+import os
 
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSKernelSwitch, CPULimitedHost
@@ -16,11 +17,17 @@ from collectors import switch_stats
 from services.api_client import TopologyApiClient
 from services.socket_client import SocketClient
 from traffic.generator import TrafficGenerator
+from dotenv import load_dotenv
 
 
-API_BASE_URL = "http://localhost:5000/api"
-SOCKET_URL = "http://localhost:5000"
-SYNC_INTERVAL = 1.0 
+# Load .env
+load_dotenv()
+
+# Constants from .env
+API_BASE_URL = os.getenv('API_BASE_URL', 'http://localhost:5000/api')
+SOCKET_URL = os.getenv('SOCKET_URL', 'http://localhost:5000')
+SYNC_INTERVAL = float(os.getenv('SYNC_INTERVAL', 1.0))
+TRAFFIC_ENABLED = os.getenv('TRAFFIC_GENERATION_ENABLED', 'true').lower() == 'true'
 
 # Khởi tạo Logger
 logger = setup_logger()

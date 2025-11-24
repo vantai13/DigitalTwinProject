@@ -6,47 +6,53 @@ services:
     image: influxdb:2.7
     container_name: digital_twin_influxdb
     ports:
-      - "8086:8086"
+      - "${INFLUXDB_PORT:-8086}:8086"
     environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=password123456
-      - DOCKER_INFLUXDB_INIT_ORG=digitaltwin_org
-      - DOCKER_INFLUXDB_INIT_BUCKET=network_metrics
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token
+      - DOCKER_INFLUXDB_INIT_MODE=${DOCKER_INFLUXDB_INIT_MODE}
+      - DOCKER_INFLUXDB_INIT_USERNAME=${DOCKER_INFLUXDB_INIT_USERNAME}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${DOCKER_INFLUXDB_INIT_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${DOCKER_INFLUXDB_INIT_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${DOCKER_INFLUXDB_INIT_BUCKET}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${DOCKER_INFLUXDB_INIT_ADMIN_TOKEN}
+      - INFLUXDB_RETENTION=${INFLUXDB_RETENTION:-7d}
     volumes:
       - influxdb-data:/var/lib/influxdb2
       - influxdb-config:/etc/influxdb2
     networks:
-      - dt_network
+      - ${DOCKER_NETWORK_NAME:-dt_network}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # --- SERVICE 2: GRAFANA ---
   grafana:
     image: grafana/grafana:latest
     container_name: digital_twin_grafana
-    user: "0"                               # chạy bằng root → tránh lỗi permission
+    user: "0"
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_DASHBOARDS_MIN_REFRESH_INTERVAL=500ms   # ← Dòng này mở khóa 500ms
-      - GF_DASHBOARDS_DEFAULT_REFRESH=1s
-
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+      - GF_DASHBOARDS_MIN_REFRESH_INTERVAL=${GF_DASHBOARDS_MIN_REFRESH_INTERVAL}
+      - GF_DASHBOARDS_DEFAULT_REFRESH=${GF_DASHBOARDS_DEFAULT_REFRESH}
     depends_on:
-      - influxdb
+      influxdb:
+        condition: service_healthy
     volumes:
-      - grafana-storage:/var/lib/grafana    # dùng Docker Volume → không lỗi permission
+      - grafana-storage:/var/lib/grafana
     networks:
-      - dt_network
+      - ${DOCKER_NETWORK_NAME:-dt_network}
+    restart: unless-stopped
 
-# Volumes nội bộ của Docker → chạy ổn định trên WSL2
 volumes:
   influxdb-data:
   influxdb-config:
   grafana-storage:
 
-# Mạng
 networks:
   dt_network:
     driver: bridge

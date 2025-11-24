@@ -8,11 +8,19 @@ import TopologyView from './components/TopologyView.vue'
 import InfoPanel from './components/InfoPanel.vue'
 
 // ============================================
-// 1. CONFIGURATION
+// 1. CONFIGURATION FROM ENV
 // ============================================
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'
+const UPDATE_INTERVAL = parseInt(import.meta.env.VITE_UPDATE_INTERVAL || 1000)
+const ENABLE_DEBUG = import.meta.env.VITE_ENABLE_DEBUG_LOGS === 'true'
 
+// Debug log function
+const debugLog = (...args) => {
+  if (ENABLE_DEBUG) {
+    console.log('[DEBUG]', ...args)
+  }
+}
 // ============================================
 // 2. STATE MANAGEMENT
 // ============================================

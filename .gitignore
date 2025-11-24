@@ -1,29 +1,32 @@
+# ====== Environment Variables ======
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+mininet_twin/.env
+
 # ====== Python backend ======
 venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.env
 instance/
 .DS_Store
 
 # ====== Node frontend ======
 node_modules/
 dist/
-.env.local
-.env.development.local
-.env.production.local
-.env.test.local
 .vscode/
 
-# ====== General ======
+# ====== Logs ======
+logs/
 *.log
-*.sqlite3
-.idea/
 
-# ====== Database & Logs ======
+# ====== Database ======
 *.sqlite3
 *.db
-logs/               # TỐT NHẤT: cả thư mục logs không đẩy lên Git
-*.log
+
+# ====== Docker ======
+docker-compose.override.yml

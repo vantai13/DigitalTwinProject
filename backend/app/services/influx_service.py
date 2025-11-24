@@ -1,17 +1,26 @@
 from influxdb_client import InfluxDBClient, Point, WriteOptions
 from influxdb_client.client.write_api import WriteOptions
+from dotenv import load_dotenv
 import time
 from app.utils.logger import get_logger
+import os
 
 logger = get_logger()  
 
+load_dotenv()
 
 class InfluxService:
     def __init__(self):
-        self.url = "http://localhost:8086"
-        self.token = "my-super-secret-auth-token"   
-        self.org = "digitaltwin_org"
-        self.bucket = "network_metrics"
+        # Load từ .env
+        self.url = os.getenv('INFLUX_URL', 'http://localhost:8086')
+        self.token = os.getenv('INFLUX_TOKEN', 'my-super-secret-auth-token')
+        self.org = os.getenv('INFLUX_ORG', 'digitaltwin_org')
+        self.bucket = os.getenv('INFLUX_BUCKET', 'network_metrics')
+        
+        # Write Options từ .env
+        batch_size = int(os.getenv('INFLUX_BATCH_SIZE', 500))
+        flush_interval = int(os.getenv('INFLUX_FLUSH_INTERVAL', 1000))
+        retry_interval = int(os.getenv('INFLUX_RETRY_INTERVAL', 5000))
 
         self.client = None
         self.write_api = None
@@ -19,14 +28,14 @@ class InfluxService:
         try:
             self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org)
             self.write_api = self.client.write_api(write_options=WriteOptions(
-                batch_size=500,
-                flush_interval=1000,   # 1 giây flush 1 lần nếu chưa đủ batch
+                batch_size=batch_size,
+                flush_interval=flush_interval,
                 jitter_interval=0,
-                retry_interval=5000
+                retry_interval=retry_interval
             ))
-            logger.info(">>> InfluxDB kết nối thành công! Ready to receive metrics.")
+            logger.info(">>> InfluxDB connected successfully!")
         except Exception as e:
-            logger.error(f"Lỗi kết nối InfluxDB: {e}")
+            logger.error(f"InfluxDB connection error: {e}")
             self.write_api = None
 
     def write_telemetry_batch(self, data):

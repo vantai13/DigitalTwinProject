@@ -1,5 +1,7 @@
+import os
 from flask import Flask
 from flask_cors import CORS
+from dotenv import load_dotenv
 
 from app.extensions import socketio
 from app.api.topology import topology_bp
@@ -8,29 +10,42 @@ from app.events.socket_events import register_socket_events
 from app.services.monitor_service import start_monitoring_service
 from app.utils.logger import get_logger
 
+# Load biến môi trường
+load_dotenv()
+
 logger = get_logger()
 
 def create_app():
     app = Flask(__name__)
     
-    #  Cấu hình App
-    CORS(app, resources={r"/*": {"origins": "*"}})
-    app.config['SECRET_KEY'] = 'secret!'
+    # Load cấu hình từ .env
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-secret-key')
+    app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
+    app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 16777216))
+    
+    # CORS Configuration
+    cors_origins = os.getenv('CORS_ORIGINS', '*').split(',')
+    CORS(app, resources={r"/*": {"origins": cors_origins}})
 
-    #  Khởi tạo Extensions với App
-    # Quan trọng: Gắn socketio vào app tại đây
-    socketio.init_app(app, async_mode='eventlet', cors_allowed_origins="*")
+    # Socket.IO Configuration
+    socketio_cors = os.getenv('SOCKETIO_CORS_ALLOWED_ORIGINS', '*')
+    async_mode = os.getenv('SOCKETIO_ASYNC_MODE', 'eventlet')
+    
+    socketio.init_app(
+        app, 
+        async_mode=async_mode, 
+        cors_allowed_origins=socketio_cors
+    )
 
-
-    # Mọi route trong topology_bp sẽ có prefix /api 
+    # Register Blueprints
     app.register_blueprint(topology_bp, url_prefix='/api')
     app.register_blueprint(device_bp, url_prefix='/api')
 
-    #  Đăng ký Socket Events
+    # Register Socket Events
     register_socket_events(socketio)
     
-    #. Khởi động Background Tasks (Reaper Thread)
+    # Start Background Services
     start_monitoring_service()
 
-    logger.info(">>> Flask App đã được khởi tạo thành công qua Factory!")
+    logger.info(">>> Flask App initialized successfully!")
     return app
