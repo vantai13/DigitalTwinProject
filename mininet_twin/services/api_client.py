@@ -12,11 +12,11 @@ class TopologyApiClient:
 
     def push_topology(self, net):
         """
-        Gửi cấu trúc mạng (Hosts, Switches, Links) lên Backend.
+        Gửi cấu trúc mininet lên 
         """
         logger.info(" Đang gửi topology lên Backend...")
         
-        topology_data = { "hosts": [], "switches": [], "links": [] }
+        topology_data = { "hosts": [], "switches": [], "links": [] } # chuẩn bị cấu trúc json 
         
         # Hosts
         for h in net.hosts:
@@ -25,7 +25,8 @@ class TopologyApiClient:
                 "ip": h.IP(),
                 "mac": h.MAC()
             })
-        
+
+
         # Switches
         for s in net.switches:
             topology_data["switches"].append({
@@ -41,11 +42,9 @@ class TopologyApiClient:
             # Tạo ID duy nhất
             lid = "-".join(sorted([n1, n2]))
             
-            if lid not in processed:
+            if lid not in processed: 
                 processed.add(lid)
-                bw_capacity = 100
-                if n1.startswith('s') and n2.startswith('s'):
-                    bw_capacity = 1000
+                bw_capacity = link.intf1.params.get('bw', 100)
                 topology_data["links"].append({
                     "node1": n1,
                     "node2": n2,

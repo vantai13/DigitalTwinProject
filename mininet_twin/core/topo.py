@@ -5,7 +5,7 @@ from utils.logger import setup_logger
 
 logger = setup_logger()
 
-class ConfigTopo(Topo):
+class ConfigTopo(Topo):  # Kế thừa topo của mininet
     """
     lấy file cấu hình topology 
     """
@@ -38,6 +38,14 @@ class ConfigTopo(Topo):
             node1 = host_nodes.get(link['from']) or switch_nodes.get(link['from'])
             node2 = host_nodes.get(link['to']) or switch_nodes.get(link['to'])
             if node1 and node2:
-                self.addLink(node1, node2, bw=link.get('bw', 100))
+                from_name = link['from']
+                to_name = link['to']
+                
+                if from_name.startswith('s') and to_name.startswith('s'):
+                    bw = link.get('bw', 1000)  
+                else:
+                    bw = link.get('bw', 100)   
+                
+                self.addLink(node1, node2, bw=bw)
             else:
                 logger.error(f"[Lỗi Topo] Node không tồn tại: {link['from']} - {link['to']}")
