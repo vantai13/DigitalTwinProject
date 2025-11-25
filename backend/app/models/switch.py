@@ -22,7 +22,7 @@ class Switch:
         # Mỗi "flow" có thể là một dictionary mô tả nó.
         self.flow_table = [] 
 
-        # [MỚI] Kho chứa thống kê từng port
+        # Kho chứa thống kê từng port
         self.port_stats = {}
 
     def set_status(self, new_status):
@@ -56,8 +56,7 @@ class Switch:
         if self.status != 'up':
             self.set_status('up')
 
-        # Tự động cập nhật port_list từ port_stats
-        self.port_list = list(stats_data.keys())
+        self.port_list = list(stats_data.keys()) # cập nhập list port từ stat_data
         
         for port_name, stats in stats_data.items():
             stats['owner_switch'] = self.name
@@ -112,8 +111,7 @@ class Switch:
     
 
     def to_json(self):
-        # Đảm bảo ports luôn đồng bộ với port_stats
-        active_ports = list(self.port_stats.keys()) if self.port_stats else self.port_list
+        active_ports = list(self.port_stats.keys()) if self.port_stats else self.port_list # cập nhập port mới nhất 
         
         return {
             'name': self.name,

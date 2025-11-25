@@ -18,13 +18,13 @@ class Host:
 
         self.status = 'unknown'  # Trạng thái ban đầu
         
-        # Thống kê tài nguyên (Resource metrics)
-        self.cpu_utilization = 0.0  # (giá trị từ 0.0 đến 100.0)
-        self.memory_usage = 0.0     # (giá trị từ 0.0 đến 100.0)
+        # Resource metrics
+        self.cpu_utilization = 0.0  
+        self.memory_usage = 0.0     
         
-        # Thống kê mạng (Network metrics)
-        self.tx_bytes = 0  # (Tổng số bytes đã gửi)
-        self.rx_bytes = 0  # (Tổng số bytes đã nhận)
+        # Network metrics
+        self.tx_bytes = 0  
+        self.rx_bytes = 0  
 
     def set_status(self, new_status):
         if new_status in ['up', 'unknown', 'offline', 'high-load']:
@@ -38,7 +38,7 @@ class Host:
         self.memory_usage = memory
 
         if timestamp: 
-            self.last_update_time = datetime.fromtimestamp(timestamp)
+            self.last_update_time = datetime.fromtimestamp(timestamp) # chuyển thành dạng datetime
         else : 
             self.last_update_time = datetime.now()
 
@@ -49,7 +49,6 @@ class Host:
             if self.status != 'high-load':
                 self.set_status('high-load')
         else:
-            # Nếu CPU thấp, và trạng thái cũ là high-load hoặc unknown -> về 'up'
             if self.status in ['high-load', 'unknown']:
                 self.set_status('up')
         

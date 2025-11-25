@@ -17,25 +17,26 @@ class Link:
         self.node1 = node1
         self.node2 = node2
         self.bandwidth_capacity = bandwidth_capacity  
+        
 
         
-        self.status = 'unknown'  
-
+        self.status = 'unknown'
         self.last_update_time = None
         
-        # số liệu hiệu năng (performance metrics)
-        # mà chúng ta muốn đồng bộ hóa từ Mininet ( dùng iPerf).
         self.current_throughput = 0.0  # (Mbps) - Băng thông đang sử dụng
         self.latency = 0.0             # (ms) - Độ trễ
         self.jitter = 0.0              # (ms) - Biến động độ trễ
+        self.utilization = 0.0
 
     def set_status(self, new_status):
-        # Thêm các trạng thái mới vào danh sách hợp lệ
         valid_states = ['up', 'down', 'unknown', 'warning', 'high-load']
         if new_status in valid_states:
             self.status = new_status
-        
 
+        if self.status in ['down', 'unknown']:
+            self.utilization = 0.0
+
+        
     def update_performance_metrics(self, throughput, latency=0.0, jitter=0.0, timestamp = None):
         """
         Cập nhật các số liệu hiệu năng (dữ liệu từ iPerf!).
@@ -53,12 +54,12 @@ class Link:
             self.set_status('down')
             return
         
-
-        utilization = self.get_utilization()
         
-        if utilization >= self.THRESHOLD_CRITICAL:
+        self.utilization = self.get_utilization()
+        
+        if self.utilization >= self.THRESHOLD_CRITICAL:
             self.set_status('high-load')
-        elif utilization >= self.THRESHOLD_WARNING:
+        elif self.utilization >= self.THRESHOLD_WARNING:
             self.set_status('warning')
         else:
             self.set_status('up')

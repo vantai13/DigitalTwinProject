@@ -78,15 +78,13 @@ class NetworkModel:
         return self.switches.get(name)
 
     def get_link(self, node1_name, node2_name):
-        link_id = f"{node1_name}-{node2_name}"
-        reverse_link_id = f"{node2_name}-{node1_name}"
-        return self.links.get(link_id) or self.links.get(reverse_link_id)
+        link_id = "-".join(sorted([node1_name, node2_name]))
+        return self.links.get(link_id)
 
     def get_all_nodes(self):
         return list(self.hosts.values()) + list(self.switches.values())
 
     def get_network_snapshot(self):
-        
         json_hosts = [host.to_json() for host in self.hosts.values()]
         json_switches = [switch.to_json() for switch in self.switches.values()]
         json_links = [link.to_json() for link in self.links.values()]
@@ -111,19 +109,19 @@ class NetworkModel:
         # 'edges'
         edges_for_graph = []
         for link in json_links:
-            if link['status'] in ['down', 'offline', 'unknown']:
-                label = 'DOWN' if link['status'] == 'down' else 'OFFLINE'
-                utilization = 0.0
-            else:
-                label = f"{link['current_throughput']:.1f} Mbps"
-                utilization = link['utilization']
+            # if link['status'] in ['down', 'offline', 'unknown']:
+            #     label = 'DOWN' if link['status'] == 'down' else 'OFFLINE'
+            #     utilization = 0.0
+            # else:
+            #     label = f"{link['current_throughput']:.1f} Mbps"
+            #     utilization = link['utilization']
             
             edges_for_graph.append({
                 'id': link['id'],
                 'from': link['node1'],
                 'to': link['node2'],
-                'label': label,
-                'utilization': utilization,
+                'label': f"{link['current_throughput']:.1f} Mbps" if link['status'] == 'up' else 'DOWN',
+                'utilization': link['utilization'],
                 'status': link['status'],
                 'details': link
             })

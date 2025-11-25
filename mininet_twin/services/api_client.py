@@ -58,6 +58,7 @@ class TopologyApiClient:
                 json=topology_data,
                 timeout=5
             )
+
             response.raise_for_status()
             logger.info(f" Gửi Topology thành công: {len(net.hosts)} hosts, {len(net.switches)} switches")
             return True
