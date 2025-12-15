@@ -66,31 +66,23 @@ def register_socket_events(socketio):
 
     @socketio.on('mininet_telemetry')
     def handle_mininet_telemetry(data):
-        """
-        Nhận gói tin tổng hợp từ Mininet và cập nhật Digital Twin.
-        """
-
-        # --- A. Đẩy vào hàng đợi để thread kia xử lý ---
+        # --- A. Đẩy data GỐC vào queue ---
         telemetry_queue.put(data)
         
         with data_lock:
-
             batch_timestamp = data.get('timestamp')
-
+            
+            # --- B. Cập nhật Digital Twin (từ raw data) ---
             for h_data in data.get('hosts', []):
                 host = digital_twin.get_host(h_data['name'])
                 if host:
                     was_offline = (host.status == 'offline')
-                    host.set_status('up') 
-
+                    host.set_status('up')
                     host.update_resource_metrics(h_data['cpu'], h_data['mem'], timestamp=batch_timestamp)
-
-                    h_data['status'] = host.status
                     
                     if was_offline:
                         socketio.emit('host_updated', host.to_json())
-
-            #  Cập nhật Links
+            
             for l_data in data.get('links', []):
                 parts = l_data['id'].split('-')
                 if len(parts) == 2:
@@ -98,11 +90,8 @@ def register_socket_events(socketio):
                     if link:
                         if link.status in ['down', 'offline', 'unknown']:
                             link.set_status('up')
-                    
-                        link.update_performance_metrics(l_data['bw'], 0, timestamp=batch_timestamp) 
-                        l_data['status'] = link.status
-
-
+                        link.update_performance_metrics(l_data['bw'], 0, timestamp=batch_timestamp)
+            
             for s_data in data.get('switches', []):
                 if isinstance(s_data, str):
                     s_name = s_data
@@ -110,28 +99,59 @@ def register_socket_events(socketio):
                 else:
                     s_name = s_data.get('name')
                     s_ports = s_data.get('ports', {})
-
+                
                 switch = digital_twin.get_switch(s_name)
                 if switch:
                     switch.heartbeat(timestamp=batch_timestamp)
                     if s_ports:
                         switch.update_port_stats(s_ports, timestamp=batch_timestamp)
-
             
             for item in data.get('latency', []):
                 pair_id = item.get('pair')
                 latency_val = item.get('latency')
-                loss_val = item.get('loss', 0.0) 
+                loss_val = item.get('loss', 0.0)
                 jitter_val = item.get('jitter', 0.0)
                 
                 if pair_id:
                     parts = pair_id.split('-')
                     if len(parts) == 2:
                         src, dst = parts[0], parts[1]
-                        
                         digital_twin.update_path_metrics(src, dst, latency_val, loss_val, jitter_val)
             
-
-        socketio.emit('network_batch_update', data)
+            # --- C. Tạo SNAPSHOT MỚI từ Digital Twin ---
+            # Đây là cách CHUẨN NHẤT: Tạo representation mới từ state hiện tại
+            frontend_data = {
+                'timestamp': batch_timestamp,
+                'hosts': [
+                    {
+                        'name': h_data['name'],
+                        'cpu': h_data['cpu'],
+                        'mem': h_data['mem'],
+                        'status': digital_twin.get_host(h_data['name']).status
+                            if digital_twin.get_host(h_data['name']) else 'unknown'
+                    }
+                    for h_data in data.get('hosts', [])
+                ],
+                'links': [
+                    {
+                        'id': l_data['id'],
+                        'bw': l_data['bw'],
+                        'status': digital_twin.get_link(
+                            l_data['id'].split('-')[0],
+                            l_data['id'].split('-')[1]
+                        ).status if len(l_data['id'].split('-')) == 2
+                            and digital_twin.get_link(
+                                l_data['id'].split('-')[0],
+                                l_data['id'].split('-')[1]
+                            ) else 'unknown'
+                    }
+                    for l_data in data.get('links', [])
+                ],
+                'switches': data.get('switches', []),  # Giữ nguyên
+                'latency': data.get('latency', [])     # Giữ nguyên
+            }
         
-        logger.info(f"Đã nhận telemetry từ Mininet: {len(data['hosts'])} hosts")
+        # --- D. Emit snapshot mới ---
+        socketio.emit('network_batch_update', frontend_data)
+        
+        logger.info(f"Đã nhận telemetry từ Mininet: {len(frontend_data['hosts'])} hosts")
