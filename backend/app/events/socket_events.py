@@ -6,6 +6,7 @@ from app.extensions import digital_twin, data_lock # Import kho hàng chung
 from app.utils.logger import get_logger
 from app.services.influx_service import influx_service
 import queue
+import time
 
 logger = get_logger()
 
@@ -13,7 +14,9 @@ logger = get_logger()
 # --- 1. KHỞI TẠO HÀNG ĐỢI (QUEUE) ---
 # Hàng đợi này đóng vai trò "bộ đệm", giúp Mininet gửi bao nhiêu cũng được,
 # Backend sẽ xử lý từ từ mà không bị treo.
-telemetry_queue = queue.Queue()
+
+MAX_QUEUE_SIZE = 100  # Chỉ cho phép tối đa 100 items trong queue
+telemetry_queue = queue.Queue(maxsize=MAX_QUEUE_SIZE)
 
 # --- 2. WORKER THREAD (Người tiêu dùng) ---
 def db_worker():
@@ -22,19 +25,31 @@ def db_worker():
     Nó liên tục lấy dữ liệu từ queue và ghi vào InfluxDB.
     """
     logger.info(">>> InfluxDB Worker đã khởi động và đang chờ dữ liệu...")
-    
+    consecutive_errors = 0  # Đếm số lỗi liên tiếp
     while True:
         # Lấy dữ liệu từ hàng đợi (sẽ block/đứng chờ tại đây nếu hàng đợi rỗng)
         data = telemetry_queue.get()
         
         if data is None: # Tín hiệu dừng (nếu cần tắt server êm đẹp)
             break
+        
+        # [MỚI] Log kích thước queue mỗi 10 lần ghi
+        current_size = telemetry_queue.qsize()
+        if current_size > 50:  # Cảnh báo khi queue > 50% capacity
+            logger.warning(f"⚠️ Queue đang đầy {current_size}/{MAX_QUEUE_SIZE} items!")
             
         try:
             # Ghi vào DB (Tác vụ tốn thời gian IO)
             influx_service.write_telemetry_batch(data)
+            consecutive_errors = 0  # Reset đếm lỗi khi ghi thành công
+
         except Exception as e:
             logger.error(f"Lỗi ghi InfluxDB background: {e}")
+            # Nếu lỗi liên tiếp > 10 lần → InfluxDB có thể đã chết
+            if consecutive_errors >= 10:
+                logger.critical("🔥 InfluxDB có thể đã ngừng hoạt động! Tạm ngưng ghi 10s...")
+                time.sleep(10)  # Ngủ 10s để InfluxDB có cơ hội hồi phục
+                consecutive_errors = 0  # Reset
         finally:
             # Đánh dấu là đã xử lý xong item này
             telemetry_queue.task_done()
@@ -66,8 +81,14 @@ def register_socket_events(socketio):
 
     @socketio.on('mininet_telemetry')
     def handle_mininet_telemetry(data):
-        # --- A. Đẩy data GỐC vào queue ---
-        telemetry_queue.put(data)
+        # --- A. Đẩy data vào queue (với timeout) ---
+        try:
+            # Chỉ chờ 0.1 giây, nếu queue đầy thì drop data
+            telemetry_queue.put(data, block=True, timeout=0.1)
+        except queue.Full:
+            # Queue đầy → Không ghi được vào DB → Log cảnh báo
+            logger.warning("⚠️ QUEUE ĐẦY! Đã bỏ qua 1 batch dữ liệu để tránh tràn RAM")
+            # Không crash, tiếp tục xử lý bình thường
         
         with data_lock:
             batch_timestamp = data.get('timestamp')
