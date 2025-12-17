@@ -109,9 +109,20 @@ def register_socket_events(socketio):
                 if len(parts) == 2:
                     link = digital_twin.get_link(parts[0], parts[1])
                     if link:
-                        if link.status in ['down', 'offline', 'unknown']:
-                            link.set_status('up')
-                        link.update_performance_metrics(l_data['bw'], 0, timestamp=batch_timestamp)
+                        previous_status = link.status                       
+
+                        # Cập nhật metrics (hàm này đã tự set status)
+                        link.update_performance_metrics(
+                            l_data['bw'], 0, timestamp=batch_timestamp
+                        )
+                        
+                        # ========================================
+                        # [QUAN TRỌNG] Phát hiện thay đổi status
+                        # ========================================
+                        if previous_status != link.status:
+                            # Status thay đổi → Broadcast ngay lập tức
+                            logger.info(f"🔄 Link {link.id} status: {previous_status} → {link.status}")
+                            socketio.emit('link_updated', link.to_json())
             
             for s_data in data.get('switches', []):
                 if isinstance(s_data, str):

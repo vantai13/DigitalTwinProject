@@ -254,12 +254,27 @@ socket.on('initial_state', (data) => {
 
   socket.on('link_updated', (linkData) => {
     if (!networkData.value) return
+    
     const edge = networkData.value.graph_data.edges.find(e => e.id === linkData.id)
-    if (edge) {
-      Object.assign(edge.details, linkData)
-      edge.group = linkData.status === 'down' ? 'link-down' : 'link'
-      edge.label = linkData.status === 'down' ? 'DOWN' : edge.label
+    if (edge) {      
+      if (edge.details) {
+        Object.assign(edge.details, linkData)
+      } else {
+        edge.details = { ...linkData }
+      }
+      
+      edge.status = linkData.status
+      edge.utilization = linkData.utilization || 0
+      
+      if (linkData.status === 'down' || linkData.current_throughput <= 0.1) {
+        edge.label = 'DOWN'
+      } else {
+        edge.label = `${linkData.current_throughput.toFixed(1)} Mbps`
+      }
+      
       lastUpdateTime.value = new Date().toISOString()
+      
+      logger.info(`🔄 Link ${linkData.id} updated: ${linkData.status}`)
     }
   })
   

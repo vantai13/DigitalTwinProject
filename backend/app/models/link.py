@@ -4,6 +4,7 @@ class Link:
 
     THRESHOLD_WARNING = 70.0  
     THRESHOLD_CRITICAL = 90.0 
+    THROUGHPUT_DOWN_THRESHOLD = 0.1
 
     def __init__(self, node1, node2, bandwidth_capacity):
         """
@@ -46,17 +47,18 @@ class Link:
         else: 
             self.last_update_time = datetime.now()
 
+        if throughput <= self.THROUGHPUT_DOWN_THRESHOLD:
+            # Throughput quá thấp → Coi như link DOWN ngay lập tức
+            self.current_throughput = 0.0  # Force về 0 để rõ ràng
+            self.utilization = 0.0
+            self.set_status('down')
+            return  # ← Thoát sớm, không tính toán tiếp
+
         self.current_throughput = throughput
         self.latency = latency
         self.jitter = jitter
-
-        if throughput <= 0.01:  # Ngưỡng rất nhỏ để tránh lỗi làm tròn
-            self.set_status('down')
-            return
-        
-        
         self.utilization = self.get_utilization()
-        
+
         if self.utilization >= self.THRESHOLD_CRITICAL:
             self.set_status('high-load')
         elif self.utilization >= self.THRESHOLD_WARNING:

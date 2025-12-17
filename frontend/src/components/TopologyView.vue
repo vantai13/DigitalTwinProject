@@ -40,33 +40,39 @@ function processEdges(edges) {
     const finalStatus = (throughput <= 0.01) ? 'down' : status
 
     // --- [LOGIC HIỂN THỊ DỰA TRÊN TRẠNG THÁI] ---
-    switch (status) {
-      case 'down':
-      case 'offline':
-        colorVal = '#475569' // Gray
-        isDashed = true
-        widthVal = 1.5
-        break
-        
-      case 'high-load':
-        colorVal = '#F60000' // Red - Nguy hiểm
-        widthVal = 4
-        shadowConfig = { enabled: true, color: 'rgba(246, 0, 0, 0.8)', size: 25 }
-        break
-        
-      case 'warning':
-        colorVal = '#f97316' // Orange - Cảnh báo
-        widthVal = 3.5
-        shadowConfig = { enabled: true, color: 'rgba(249, 115, 22, 0.6)', size: 20 }
-        break
-        
-      case 'up':
-      default:
-        // Nếu đang UP mà có lưu lượng > 0 thì cho phát sáng nhẹ cho đẹp
-        if (utilization > 0) {
-           shadowConfig = { enabled: true, color: 'rgba(0, 247, 247, 0.5)', size: 15 }
-        }
-        break
+    if (status === 'down' || status === 'offline') {
+      colorVal = '#475569' // Gray
+      isDashed = true
+      widthVal = 1.5
+      edge.label = 'DOWN'  // ← Override label
+    }
+    // Ưu tiên 2: Nếu throughput = 0 nhưng status chưa update → Cũng DOWN
+    else if (throughput <= 0.1) {
+      colorVal = '#475569'
+      isDashed = true
+      widthVal = 1.5
+      edge.label = 'DOWN'  // ← Force DOWN thay vì "0.0 Mbps"
+    }
+    // Ưu tiên 3: HIGH-LOAD
+    else if (status === 'high-load') {
+      colorVal = '#F60000' // Red
+      widthVal = 4
+      shadowConfig = { enabled: true, color: 'rgba(246, 0, 0, 0.8)', size: 25 }
+      edge.label = `${throughput.toFixed(1)} Mbps`  // Hiển thị số bình thường
+    }
+    // Ưu tiên 4: WARNING
+    else if (status === 'warning') {
+      colorVal = '#f97316' // Orange
+      widthVal = 3.5
+      shadowConfig = { enabled: true, color: 'rgba(249, 115, 22, 0.6)', size: 20 }
+      edge.label = `${throughput.toFixed(1)} Mbps`
+    }
+    // Ưu tiên 5: UP bình thường
+    else {
+      if (utilization > 0) {
+        shadowConfig = { enabled: true, color: 'rgba(0, 247, 247, 0.5)', size: 15 }
+      }
+      edge.label = `${throughput.toFixed(1)} Mbps`
     }
 
     // Animation arrows (Giữ nguyên logic hiển thị mũi tên khi có traffic)
