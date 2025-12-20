@@ -5,6 +5,11 @@
       <span title="Digital Twin Network Dashboard">Digital Twin Network Dashboard</span>
     </div>
 
+    <!-- Slot cho View Switcher -->
+    <div class="header-center">
+      <slot name="actions"></slot>
+    </div>
+
     <!-- Thời gian cập nhật -->
     <div class="time-stats">
       <span>Latest Update:</span>

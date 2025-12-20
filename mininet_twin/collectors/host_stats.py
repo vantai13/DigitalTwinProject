@@ -125,11 +125,12 @@ def get_interface_bytes(host, interface_name):
     try:
         cmd = f'timeout 0.2s cat /proc/net/dev | grep "{interface_name}:"'
 
-        if hasattr(host, 'lock'):
-            with host.lock:
-                cmd_result = host.cmd(cmd)
-        else:
-            cmd_result = host.cmd(cmd)
+        # if hasattr(host, 'lock'):
+        #     with host.lock:
+        #         cmd_result = host.cmd(cmd)
+        # else:
+        #     cmd_result = host.cmd(cmd)
+        cmd_result = host.cmd(cmd)
 
         # Timeout → trả về rỗng hoặc "Terminated"
         if not cmd_result or "Terminated" in cmd_result:
@@ -156,12 +157,12 @@ def list_all_interfaces(host):
     """Debug: Liệt kê tất cả interface của host (cũng thêm timeout)."""
     try:
         cmd = "timeout 0.5s cat /proc/net/dev"  # Cho debug thì timeout dài hơn chút
-        if hasattr(host, 'lock'):
-            with host.lock:
-                cmd_result = host.cmd(cmd)
-        else:
-            cmd_result = host.cmd(cmd)
-
+        # if hasattr(host, 'lock'):
+        #     with host.lock:
+        #         cmd_result = host.cmd(cmd)
+        # else:
+        #     cmd_result = host.cmd(cmd)
+        cmd_result = host.cmd(cmd)
         logger.info(f"\n[DEBUG] Interfaces của {host.name}:\n{cmd_result}")
 
     except Exception as e:

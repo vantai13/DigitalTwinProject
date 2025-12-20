@@ -3,9 +3,14 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 import { io } from 'socket.io-client'
 
+// ============================================
+// ✅ IMPORT TẤT CẢ COMPONENTS CẦN THIẾT
+// ============================================
 import Header from './components/Header.vue'
 import TopologyView from './components/TopologyView.vue'
 import InfoPanel from './components/InfoPanel.vue'
+import ViewSwitcher from './components/ViewSwitcher.vue'
+import AnalyticsView from './components/analytics/AnalyticsView.vue'
 
 // ============================================
 // 1. CONFIGURATION FROM ENV
@@ -31,6 +36,7 @@ const selectedNodeId = ref(null)
 const selectedEdgeId = ref(null)
 const connectionStatus = ref('connecting')
 const lastUpdateTime = ref(new Date().toISOString())
+const currentView = ref('live')
 
 let socket = null
 
@@ -175,7 +181,7 @@ socket.on('initial_state', (data) => {
           const bandwidth = edge.details?.bandwidth_capacity || 100
           
           // [FIX] Nếu bandwidth = 0 hoặc rất nhỏ, đánh dấu là down
-          if (lData.bw <= 0.01) {
+          if (lData.bw <= 0.1) {
             edge.label = 'DOWN'
             edge.utilization = 0
             edge.status = 'down'
@@ -274,7 +280,7 @@ socket.on('initial_state', (data) => {
       
       lastUpdateTime.value = new Date().toISOString()
       
-      logger.info(`🔄 Link ${linkData.id} updated: ${linkData.status}`)
+      console.log(`🔄 Link ${linkData.id} updated: ${linkData.status}`)
     }
   })
   
@@ -333,14 +339,27 @@ function handleSelectionCleared() {
   selectedNodeId.value = null
   selectedEdgeId.value = null
 }
+
+// ✅ THÊM HÀM NÀY
+function handleViewChange(view) {
+  console.log('🔄 Switching view to:', view)
+  currentView.value = view
+}
 </script>
 
 <template>
   <div class="app-container">
-    <Header :lastUpdate="lastUpdateTime" />
+   <Header :lastUpdate="lastUpdateTime">
+      <template #actions>
+        <ViewSwitcher 
+          :current-view="currentView"
+          @change-view="handleViewChange"
+        />
+      </template>
+    </Header>
 
-    <!-- MAIN CONTENT -->
-    <div v-if="networkData && connectionStatus === 'connected'" class="main-content">
+    <!-- LIVE MONITORING VIEW -->
+    <div v-if="currentView === 'live' && networkData && connectionStatus === 'connected'" class="main-content">
       <TopologyView 
         :graphData="networkData.graph_data"
         @node-selected="handleNodeSelected"
@@ -353,6 +372,11 @@ function handleSelectionCleared() {
         :selectedNodeId="selectedNodeId"
         :selectedEdgeId="selectedEdgeId"
       />
+    </div>
+
+    <!-- ANALYTICS VIEW -->
+    <div v-if="currentView === 'analytics'" class="analytics-container">
+      <AnalyticsView />
     </div>
 
     <!-- LOADING STATE -->
