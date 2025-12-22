@@ -16,26 +16,24 @@
 
     <!-- Dashboard Content -->
     <div class="dashboard-content" :class="`layout-${currentLayout}`">
+      <!-- ✅ FIX: Dashboard Host Performance -->
       <template v-if="selectedDashboard === 'host'">
         <GrafanaPanel
           title="CPU Usage Over Time"
           :embed-url="getEmbedUrl('adrnqwx', 1)"
         />
         <GrafanaPanel
-          title="CPU Status Gauge"
+          title="Memory Usage Time Series"
           :embed-url="getEmbedUrl('adrnqwx', 2)"
         />
         <GrafanaPanel
-          title="Memory Usage Over Time"
-          :embed-url="getEmbedUrl('adrnqwx', 4)"
-        />
-        <GrafanaPanel
           title="Host Status Overview"
-          :embed-url="getEmbedUrl('adrnqwx', 5)"
+          :embed-url="getEmbedUrl('adrnqwx', 3)"
           :full-width="true"
         />
       </template>
 
+      <!-- ✅ FIX: Dashboard Link Performance -->
       <template v-else-if="selectedDashboard === 'link'">
         <GrafanaPanel
           title="Link Throughput"
@@ -43,15 +41,16 @@
           :full-width="true"
         />
         <GrafanaPanel
-          title="Packet Loss Rate"
-          :embed-url="getEmbedUrl('add97wb', 3)"
+          title="Packet Loss per Link"
+          :embed-url="getEmbedUrl('add97wb', 2)"
         />
         <GrafanaPanel
-          title="Current Link Status"
-          :embed-url="getEmbedUrl('add97wb', 5)"
+          title="Throughput Table"
+          :embed-url="getEmbedUrl('add97wb', 3)"
         />
       </template>
 
+      <!-- ✅ FIX: Dashboard Overview -->
       <template v-else-if="selectedDashboard === 'overview'">
         <GrafanaPanel
           title="Network Overview - CPU"
@@ -63,7 +62,7 @@
         />
         <GrafanaPanel
           title="Host Status Table"
-          :embed-url="getEmbedUrl('adrnqwx', 5)"
+          :embed-url="getEmbedUrl('adrnqwx', 3)"
           :full-width="true"
         />
       </template>
@@ -149,14 +148,15 @@ function getEmbedUrl(dashboardUid, panelId) {
   }
   
   // ✅ SỬ DỤNG TRỰC TIẾP UID TỪ THAM SỐ
-  const baseUrl = `${GRAFANA_BASE_URL}/d-solo/${dashboardUid}/dashboard`
+  const baseUrl = `${GRAFANA_BASE_URL}/d-solo/${dashboardUid}`
   const params = new URLSearchParams({
     orgId: '1',
     from: 'now-5m',
     to: 'now',
     panelId: panelId.toString(),
     theme: 'dark',
-    refresh: '5s'
+    refresh: '1s',
+    'var-host_name': 'All'
   })
   
   const fullUrl = `${baseUrl}?${params.toString()}`
