@@ -25,49 +25,49 @@ function processEdges(edges) {
   if (!Array.isArray(edges)) return []
 
   return edges.map(edge => {
-    // Mặc định (status = 'up')
-    let colorVal = '#00F7F7'   // Cyan
+    let colorVal = '#00F7F7'
     let widthVal = 2.5
     let isDashed = false
     let shadowConfig = { enabled: false }
     
-        // Lấy status từ Backend gửi xuống
     const status = edge.status || edge.details?.status || 'unknown'
     const utilization = edge.utilization || 0
-    const throughput = edge.details?.current_throughput || 0
     
-    // [FIX] Nếu throughput = 0, đánh dấu là down
-    const finalStatus = (throughput <= 0.01) ? 'down' : status
-
-    // --- [LOGIC HIỂN THỊ DỰA TRÊN TRẠNG THÁI] ---
-    if (status === 'down' || status === 'offline') {
-      colorVal = '#475569' // Gray
-      isDashed = true
-      widthVal = 1.5
-      edge.label = 'DOWN'  // ← Override label
+    // ✅ FIX 1: LẤY THROUGHPUT TRỰC TIẾP TỪ edge.label HOẶC edge.details
+    // Nếu edge.label đã có dạng "45.2 Mbps", parse nó ra
+    let throughput = 0
+    
+    if (edge.label && typeof edge.label === 'string') {
+      const match = edge.label.match(/(\d+\.?\d*)\s*Mbps/)
+      if (match) {
+        throughput = parseFloat(match[1])
+      }
     }
-    // Ưu tiên 2: Nếu throughput = 0 nhưng status chưa update → Cũng DOWN
-    else if (throughput <= 0.1) {
+    
+    // Nếu không có label hoặc parse thất bại, lấy từ details
+    if (throughput === 0 && edge.details) {
+      throughput = edge.details.current_throughput || 0
+    }
+
+    // === LOGIC HIỂN THỊ ===
+    if (status === 'down' || status === 'offline' || throughput <= 0.1) {
       colorVal = '#475569'
       isDashed = true
       widthVal = 1.5
-      edge.label = 'DOWN'  // ← Force DOWN thay vì "0.0 Mbps"
+      edge.label = 'DOWN'  // ← Force DOWN
     }
-    // Ưu tiên 3: HIGH-LOAD
     else if (status === 'high-load') {
-      colorVal = '#F60000' // Red
+      colorVal = '#F60000'
       widthVal = 4
       shadowConfig = { enabled: true, color: 'rgba(246, 0, 0, 0.8)', size: 25 }
-      edge.label = `${throughput.toFixed(1)} Mbps`  // Hiển thị số bình thường
+      edge.label = `${throughput.toFixed(1)} Mbps`  // ← Hiển thị số
     }
-    // Ưu tiên 4: WARNING
     else if (status === 'warning') {
-      colorVal = '#f97316' // Orange
+      colorVal = '#f97316'
       widthVal = 3.5
       shadowConfig = { enabled: true, color: 'rgba(249, 115, 22, 0.6)', size: 20 }
       edge.label = `${throughput.toFixed(1)} Mbps`
     }
-    // Ưu tiên 5: UP bình thường
     else {
       if (utilization > 0) {
         shadowConfig = { enabled: true, color: 'rgba(0, 247, 247, 0.5)', size: 15 }
@@ -75,33 +75,23 @@ function processEdges(edges) {
       edge.label = `${throughput.toFixed(1)} Mbps`
     }
 
-    // Animation arrows (Giữ nguyên logic hiển thị mũi tên khi có traffic)
     let arrowsConfig = { to: { enabled: false } }
-    if (status !== 'down' && utilization > 1) {
-      // let arrowSpeed = 1
-      // if (status === 'high-load') arrowSpeed = 2.5
-      // else if (status === 'warning') arrowSpeed = 1.5
-      
-      // arrowsConfig = {
-      //   to: { enabled: true, type: 'arrow', scaleFactor: 0.8 },
-      //   middle: { enabled: true, type: 'arrow', scaleFactor: 0.6 }
-      // }
-    }
 
     return {
       ...edge,
-      color: {
-        color: colorVal,
-        highlight: colorVal,
-        hover: colorVal
-      },
+      color: { color: colorVal, highlight: colorVal, hover: colorVal },
       width: widthVal,
       arrows: arrowsConfig,
       dashes: isDashed,
       shadow: shadowConfig,
-      // ... (giữ nguyên các thuộc tính font/smooth)
       smooth: { type: 'continuous', roundness: 0.5 },
-      font: { color: '#00F7F7', size: 11, align: 'middle', strokeWidth: 3, strokeColor: '#0f172a' }
+      font: { 
+        color: '#00F7F7', 
+        size: 11, 
+        align: 'middle', 
+        strokeWidth: 3, 
+        strokeColor: '#0f172a' 
+      }
     }
   })
 }
