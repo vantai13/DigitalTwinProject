@@ -5,118 +5,196 @@ import random
 from utils.logger import setup_logger
 import os 
 import time
+import math
 
 logger = setup_logger()
 
 # Dictionary để lưu lần đo trước: { 'h1': {'prev_usage': 12345, 'prev_time': 1600000}, ... }
 _cpu_tracker = {}
 
-def get_host_cpu_usage(host):
-    """
-    Lấy % CPU usage chính xác dựa trên Cgroups (Linux Control Groups).
-    Yêu cầu Mininet chạy với host=CPULimitedHost.
-    """
-    # 1. Xác định đường dẫn file cpuacct của host này
-    # Trong Mininet, thường nằm ở /sys/fs/cgroup/cpu,cpuacct/<tên_nhóm>/<tên_host>
-    # CPULimitedHost tự động gắn cgroup vào host object
+# def get_host_cpu_usage(host):
+#     """
+#     Lấy % CPU usage chính xác dựa trên Cgroups (Linux Control Groups).
+#     Yêu cầu Mininet chạy với host=CPULimitedHost.
+#     """
+#     # 1. Xác định đường dẫn file cpuacct của host này
+#     # Trong Mininet, thường nằm ở /sys/fs/cgroup/cpu,cpuacct/<tên_nhóm>/<tên_host>
+#     # CPULimitedHost tự động gắn cgroup vào host object
     
-    try:
-        # Lấy PID của tiếng trình shell trong host ảo
-        pid = host.pid 
+#     try:
+#         # Lấy PID của tiếng trình shell trong host ảo
+#         pid = host.pid 
         
-        # Tìm file cpuacct.usage dựa trên cgroup của PID này
-        # Đây là cách tổng quát nhất để tìm cgroup path
-        cgroup_path = ""
-        with open(f"/proc/{pid}/cgroup", "r") as f:
-            for line in f:
-                if "cpuacct" in line:
-                    # line format: 11:cpu,cpuacct:/mininet/h1
-                    cgroup_path = line.split(":")[2].strip()
-                    break
+#         # Tìm file cpuacct.usage dựa trên cgroup của PID này
+#         # Đây là cách tổng quát nhất để tìm cgroup path
+#         cgroup_path = ""
+#         with open(f"/proc/{pid}/cgroup", "r") as f:
+#             for line in f:
+#                 if "cpuacct" in line:
+#                     # line format: 11:cpu,cpuacct:/mininet/h1
+#                     cgroup_path = line.split(":")[2].strip()
+#                     break
         
-        if not cgroup_path:
-            return 0.0
+#         if not cgroup_path:
+#             return 0.0
 
-        # Đường dẫn tuyệt đối tới file thống kê
-        base_cgroup = "/sys/fs/cgroup/cpu,cpuacct"
-        usage_file = f"{base_cgroup}{cgroup_path}/cpuacct.usage"
+#         # Đường dẫn tuyệt đối tới file thống kê
+#         base_cgroup = "/sys/fs/cgroup/cpu,cpuacct"
+#         usage_file = f"{base_cgroup}{cgroup_path}/cpuacct.usage"
 
-        # Đọc tổng số nanoseconds CPU đã dùng
-        with open(usage_file, "r") as f:
-            current_usage_ns = int(f.read().strip())
+#         # Đọc tổng số nanoseconds CPU đã dùng
+#         with open(usage_file, "r") as f:
+#             current_usage_ns = int(f.read().strip())
             
-        current_time_ns = time.time_ns() # Thời gian hiện tại (nanoseconds)
+#         current_time_ns = time.time_ns() # Thời gian hiện tại (nanoseconds)
 
-        # --- TÍNH TOÁN % ---
-        usage_percent = 0.0
+#         # --- TÍNH TOÁN % ---
+#         usage_percent = 0.0
         
-        if host.name in _cpu_tracker:
-            prev = _cpu_tracker[host.name]
-            delta_usage = current_usage_ns - prev['usage']
-            delta_time = current_time_ns - prev['time']
+#         if host.name in _cpu_tracker:
+#             prev = _cpu_tracker[host.name]
+#             delta_usage = current_usage_ns - prev['usage']
+#             delta_time = current_time_ns - prev['time']
             
-            if delta_time > 0:
-                # CPU % = (Thời gian dùng CPU / Tổng thời gian trôi qua) * 100
-                # Lưu ý: Nếu máy có nhiều core, con số này có thể > 100% nếu không chia số core
-                usage_percent = (delta_usage / delta_time) * 100
+#             if delta_time > 0:
+#                 # CPU % = (Thời gian dùng CPU / Tổng thời gian trôi qua) * 100
+#                 # Lưu ý: Nếu máy có nhiều core, con số này có thể > 100% nếu không chia số core
+#                 usage_percent = (delta_usage / delta_time) * 100
         
-        # Cập nhật trạng thái để dùng cho vòng lặp sau
-        _cpu_tracker[host.name] = {
-            'usage': current_usage_ns,
-            'time': current_time_ns
-        }
+#         # Cập nhật trạng thái để dùng cho vòng lặp sau
+#         _cpu_tracker[host.name] = {
+#             'usage': current_usage_ns,
+#             'time': current_time_ns
+#         }
 
-        return round(usage_percent, 2)
+#         return round(usage_percent, 2)
 
-    except FileNotFoundError:
-        # Fallback: Nếu không tìm thấy cgroup (do chưa config CPULimitedHost), dùng cách cũ nhẹ nhàng hơn
-        # Dùng ps để lấy %CPU của tiến trình shell (nhẹ hơn top)
-        try:
-            # Lấy %CPU của chính process host đó
-            cmd = f"ps -p {host.pid} -o %cpu --no-headers"
-            # Chạy lệnh trên máy thật (không phải host.cmd) để tránh overhead
-            output = os.popen(cmd).read().strip()
-            if output:
-                return float(output)
-        except:
-            pass
-        return 0.0
-    except Exception as e:
-        logger.error(f"Lỗi đo CPU {host.name}: {e}")
-        return 0.0
+#     except FileNotFoundError:
+#         # Fallback: Nếu không tìm thấy cgroup (do chưa config CPULimitedHost), dùng cách cũ nhẹ nhàng hơn
+#         # Dùng ps để lấy %CPU của tiến trình shell (nhẹ hơn top)
+#         try:
+#             # Lấy %CPU của chính process host đó
+#             cmd = f"ps -p {host.pid} -o %cpu --no-headers"
+#             # Chạy lệnh trên máy thật (không phải host.cmd) để tránh overhead
+#             output = os.popen(cmd).read().strip()
+#             if output:
+#                 return float(output)
+#         except:
+#             pass
+#         return 0.0
+#     except Exception as e:
+#         logger.error(f"Lỗi đo CPU {host.name}: {e}")
+#         return 0.0
+    
+"""
+ Lấy % CPU sử dụng cho Mininet host (giả lập).
+"""
+# Lưu state theo host để mượt + có spike kéo dài
+_host_state = {}  # {host.name: {"cpu": float, "spike_until": float}}
+def get_host_cpu_usage(host):
+    name = host.name
+    now = time.time()
 
+    st = _host_state.setdefault(name, {"cpu": random.uniform(20, 50), "spike_until": 0})
+
+    # host_id để mỗi host lệch pha / lệch baseline cho đa dạng
+    host_id_str = re.findall(r'\d+', name)
+    host_id = int(host_id_str[0]) if host_id_str else 1
+
+    # baseline 20..60
+    baseline = 20 + (host_id * 7) % 40
+
+    # chu kỳ: 12..35s (mỗi host khác nhau)
+    period = 12 + (host_id * 3) % 24
+    phase = host_id * 0.9
+
+    wave = 15 * math.sin((2 * math.pi / period) * now + phase)  # +-15
+    noise = random.uniform(-6, 6)
+
+    # Spike: 6% xác suất tạo spike kéo dài 2..6s
+    if now > st["spike_until"] and random.random() < 0.06:
+        st["spike_until"] = now + random.uniform(2, 6)
+
+    spike = random.uniform(15, 45) if now < st["spike_until"] else 0
+
+    raw = baseline + wave + noise + spike
+
+    # Clamp để không "dính trần": vẫn có thể chạm 100 nhưng ít và không lâu
+    raw = max(0, min(100, raw))
+
+    # EMA smoothing (0.2 -> khá mượt)
+    alpha = 0.2
+    st["cpu"] = (1 - alpha) * st["cpu"] + alpha * raw
+
+    return round(st["cpu"], 2)
+
+
+# def get_host_memory_usage(host):
+#     """
+#     Lấy % Memory THẬT từ lệnh free -m.
+#     Không dùng random nữa.
+#     """
+#     try:
+#         # Chạy lệnh free -m
+#         output = host.cmd('free -m')
+        
+#         # Parse output
+#         #              total        used        free      shared  buff/cache   available
+#         # Mem:          7936        1542        4521          13        1872        6124
+        
+#         for line in output.splitlines():
+#             if "Mem:" in line:
+#                 # Dùng regex để tách số, xử lý cả khoảng trắng nhiều
+#                 parts = re.findall(r'\d+', line)
+#                 if len(parts) >= 2:
+#                     total_mem = float(parts[0])
+#                     used_mem = float(parts[1])
+                    
+#                     if total_mem == 0: return 0.0
+                    
+#                     # Tính % thực tế
+#                     real_usage = (used_mem / total_mem) * 100
+#                     return round(real_usage, 2)
+
+#         return 0.0 
+
+#     except Exception as e:
+#         logger.error(f"[Lỗi Memory] {host.name}: {e}")
+#         return 0.0
+
+"""
+ Lấy % Memory sử dụng cho Mininet host (giả lập)."""
 def get_host_memory_usage(host):
-    """
-    Lấy % Memory THẬT từ lệnh free -m.
-    Không dùng random nữa.
-    """
-    try:
-        # Chạy lệnh free -m
-        output = host.cmd('free -m')
-        
-        # Parse output
-        #              total        used        free      shared  buff/cache   available
-        # Mem:          7936        1542        4521          13        1872        6124
-        
-        for line in output.splitlines():
-            if "Mem:" in line:
-                # Dùng regex để tách số, xử lý cả khoảng trắng nhiều
-                parts = re.findall(r'\d+', line)
-                if len(parts) >= 2:
-                    total_mem = float(parts[0])
-                    used_mem = float(parts[1])
-                    
-                    if total_mem == 0: return 0.0
-                    
-                    # Tính % thực tế
-                    real_usage = (used_mem / total_mem) * 100
-                    return round(real_usage, 2)
+    name = host.name
+    now = time.time()
 
-        return 0.0 
+    st = _host_state.setdefault(name, {})
+    if "mem" not in st:
+        host_id_str = re.findall(r'\d+', name)
+        host_id = int(host_id_str[0]) if host_id_str else 1
+        st["mem"] = 25 + (host_id * 9) % 40  # 25..65
+        st["mem_target"] = st["mem"]
+        st["mem_target_until"] = 0
 
-    except Exception as e:
-        logger.error(f"[Lỗi Memory] {host.name}: {e}")
-        return 0.0
+    # Thỉnh thoảng đổi target (mỗi 8..20s)
+    if now > st.get("mem_target_until", 0):
+        st["mem_target_until"] = now + random.uniform(8, 20)
+        st["mem_target"] = random.uniform(15, 85)
+
+    mem = st["mem"]
+    target = st["mem_target"]
+
+    # kéo dần về target + random walk nhỏ
+    drift = (target - mem) * 0.05
+    step = random.uniform(-2.0, 2.0)
+
+    mem = mem + drift + step
+
+    # Clamp 10..90 cho nhìn realistic
+    mem = max(10, min(90, mem))
+    st["mem"] = mem
+
+    return round(mem, 2)
 
 def get_interface_bytes(host, interface_name):
     """
