@@ -20,7 +20,7 @@ node_modules/
 dist/
 .vscode/
 frontend/public/
- frontend/package-lock.json
+frontend/package-lock.json
 
 # ====== Logs ======
 logs/
@@ -34,5 +34,5 @@ logs/
 docker-compose.override.yml
 
 # InfluxDB data
-influxdb/data/
-influxdb/meta/
+monitoring/influxdb/data/
+monitoring/influxdb/meta/
