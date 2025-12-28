@@ -285,13 +285,9 @@ socket.on('initial_state', (data) => {
   })
   
   socket.on('disconnect', (reason) => {
-    console.warn('⚠️ WebSocket disconnected:', reason)
-    connectionStatus.value = 'error'
-    
-    if (reason === 'io server disconnect') {
-      socket.connect()
-    }
-  })
+  console.warn('⚠️ WebSocket disconnected:', reason)
+  connectionStatus.value = 'connecting'
+})
 
   socket.on('connect_error', (error) => {
     console.error('❌ Connection error:', error)

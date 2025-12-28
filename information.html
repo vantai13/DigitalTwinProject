@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Twin - Luồng Hoạt Động (Updated)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #00F7F7;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 0 0 20px rgba(0, 247, 247, 0.5);
+        }
+        
+        .phase {
+            background: rgba(30, 41, 59, 0.8);
+            border: 2px solid #334155;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .phase-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #00F7F7;
+        }
+        
+        .phase-number {
+            background: #00F7F7;
+            color: #0f172a;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            margin-right: 20px;
+            box-shadow: 0 0 20px rgba(0, 247, 247, 0.6);
+        }
+        
+        .phase-title {
+            font-size: 1.8em;
+            color: #00F7F7;
+            font-weight: 600;
+        }
+        
+        .phase-time {
+            margin-left: auto;
+            background: rgba(249, 115, 22, 0.2);
+            color: #f97316;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            border: 1px solid #f97316;
+        }
+        
+        .step {
+            background: rgba(15, 23, 42, 0.6);
+            border-left: 4px solid #00F7F7;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .step:hover {
+            background: rgba(15, 23, 42, 0.9);
+            transform: translateX(5px);
+            box-shadow: 0 4px 16px rgba(0, 247, 247, 0.3);
+        }
+        
+        .step-title {
+            color: #00F7F7;
+            font-weight: 600;
+            font-size: 1.2em;
+            margin-bottom: 8px;
+        }
+        
+        .step-desc {
+            color: #94a3b8;
+            margin-left: 20px;
+        }
+        
+        .code {
+            background: #0f172a;
+            color: #00F7F7;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            border: 1px solid #334155;
+        }
+        
+        .timeline {
+            position: relative;
+            padding-left: 40px;
+            margin: 20px 0;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(180deg, #00F7F7 0%, #f97316 100%);
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 25px;
+        }
+        
+        .timeline-dot {
+            position: absolute;
+            left: -32px;
+            width: 12px;
+            height: 12px;
+            background: #00F7F7;
+            border-radius: 50%;
+            box-shadow: 0 0 15px rgba(0, 247, 247, 0.8);
+        }
+        
+        .warning {
+            background: rgba(239, 68, 68, 0.1);
+            border-left: 4px solid #ef4444;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+        
+        .info {
+            background: rgba(34, 211, 238, 0.1);
+            border-left: 4px solid #22d3ee;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+        
+        .success {
+            background: rgba(34, 197, 94, 0.1);
+            border-left: 4px solid #22c55e;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+        
+        .flow-diagram {
+            background: rgba(15, 23, 42, 0.8);
+            padding: 30px;
+            border-radius: 12px;
+            margin: 30px 0;
+            border: 2px solid #334155;
+            text-align: center;
+        }
+        
+        .flow-box {
+            background: rgba(0, 247, 247, 0.1);
+            border: 2px solid #00F7F7;
+            padding: 15px 25px;
+            margin: 10px;
+            border-radius: 8px;
+            display: inline-block;
+            min-width: 200px;
+            box-shadow: 0 0 20px rgba(0, 247, 247, 0.2);
+        }
+        
+        .arrow {
+            color: #f97316;
+            font-size: 2em;
+            margin: 10px 0;
+        }
+        
+        .frequency-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        .frequency-table th,
+        .frequency-table td {
+            padding: 12px;
+            border: 1px solid #334155;
+            text-align: left;
+        }
+        
+        .frequency-table th {
+            background: rgba(0, 247, 247, 0.2);
+            color: #00F7F7;
+            font-weight: 600;
+        }
+        
+        .frequency-table tr:hover {
+            background: rgba(0, 247, 247, 0.1);
+        }
+        
+        .highlight {
+            color: #00F7F7;
+            font-weight: 600;
+        }
+        
+        .new-feature {
+            background: rgba(34, 197, 94, 0.2);
+            border: 2px solid #22c55e;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .new-feature h4 {
+            color: #22c55e;
+            margin-bottom: 10px;
+        }
+        
+        .changed {
+            background: rgba(249, 115, 22, 0.1);
+            border-left: 4px solid #f97316;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 DIGITAL TWIN - LUỒNG HOẠT ĐỘNG CHI TIẾT (CẬP NHẬT MỚI NHẤT)</h1>
+        
+        <!-- PHASE 0: STARTUP -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">0</div>
+                <div class="phase-title">KHỞI ĐỘNG HỆ THỐNG</div>
+                <div class="phase-time">⏱️ 0-5s</div>
+            </div>
+            
+            <div class="step">
+                <div class="step-title">📦 1. Backend Flask (run.py)</div>
+                <div class="step-desc">
+                    • File: <span class="code">backend/run.py</span><br>
+                    • Load <span class="code">.env</span> → Đọc cấu hình (PORT, HOST, DEBUG)<br>
+                    • Gọi <span class="code">create_app()</span> → Khởi tạo Flask app<br>
+                    • <strong>Cấu hình SocketIO:</strong> <span class="code">async_mode='threading'</span> (thay vì eventlet)<br>
+                    • Khởi động SocketIO Server tại <span class="code">localhost:5000</span><br>
+                    • <strong>Khởi động Monitoring Service:</strong> <span class="code">start_monitoring_service()</span>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-title">🌐 2. Mininet Simulation (main.py)</div>
+                <div class="step-desc">
+                    • File: <span class="code">mininet_twin/main.py</span><br>
+                    • Đọc <span class="code">topology.json</span> → Tạo mạng ảo<br>
+                    • Khởi tạo <span class="code">Mininet</span> với <span class="code">CPULimitedHost, OVSKernelSwitch, TCLink</span><br>
+                    • <strong class="highlight">QUAN TRỌNG:</strong> Gán <span class="code">threading.Lock()</span> cho mỗi host để tránh race condition<br>
+                    • Gọi <span class="code">net.start()</span> → Mạng Mininet hoạt động
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-title">💻 3. Frontend Vue.js (App.vue)</div>
+                <div class="step-desc">
+                    • File: <span class="code">frontend/src/App.vue</span><br>
+                    • <span class="code">onMounted()</span> → Gọi <span class="code">checkBackendHealth()</span><br>
+                    • <span class="code">setupWebSocket()</span> → Kết nối Socket với <span class="code">reconnection=true</span><br>
+                    • Đợi nhận <span class="code">initial_state</span> event
+                </div>
+            </div>
+            
+            <div class="new-feature">
+                <h4>✨ TÍNH NĂNG MỚI: Multi-View Support</h4>
+                • Component <span class="code">ViewSwitcher.vue</span> cho phép chuyển đổi giữa:<br>
+                &nbsp;&nbsp;→ <strong>Live Monitoring:</strong> Xem topology real-time<br>
+                &nbsp;&nbsp;→ <strong>Analytics Dashboard:</strong> Xem biểu đồ Grafana<br>
+                • Component <span class="code">AnalyticsView.vue</span> tích hợp Grafana iframe
+            </div>
+        </div>
+
+        <!-- PHASE 1: INITIALIZATION -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">1</div>
+                <div class="phase-title">KHỞI TẠO TOPOLOGY</div>
+                <div class="phase-time">⏱️ 5-8s</div>
+            </div>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">📡 Mininet → Backend</div>
+                    <div class="step-desc">
+                        • Gọi <span class="code">api_client.push_topology(net)</span><br>
+                        • POST <span class="code">/api/init/topology</span><br>
+                        • Payload: hosts[], switches[], links[] (với bandwidth capacity từ TCLink)
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">🧠 Backend xử lý</div>
+                    <div class="step-desc">
+                        • File: <span class="code">backend/app/api/topology.py</span><br>
+                        • <span class="code">init_topology()</span> → Xóa dữ liệu cũ<br>
+                        • Tạo các đối tượng Host, Switch, Link trong <span class="code">digital_twin</span><br>
+                        • <strong>Khởi tạo InfluxDB Writer Queue:</strong> <span class="code">telemetry_queue</span><br>
+                        • Emit <span class="code">initial_state</span> qua WebSocket
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">🎨 Frontend nhận dữ liệu</div>
+                    <div class="step-desc">
+                        • Socket event: <span class="code">initial_state</span><br>
+                        • <strong class="highlight">FIX MỚI:</strong> Xử lý status offline/down ngay từ initial state<br>
+                        • Set đúng group cho nodes (host-offline, switch-offline)<br>
+                        • Set label='DOWN' cho links có status down<br>
+                        • <span class="code">networkData.value = data</span><br>
+                        • <span class="code">TopologyView.vue</span> → Vẽ sơ đồ vis-network
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PHASE 2: TRAFFIC GENERATION -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">2</div>
+                <div class="phase-title">SINH TRAFFIC & MONITORING</div>
+                <div class="phase-time">⏱️ 8s → Vô hạn</div>
+            </div>
+            
+            <div class="step">
+                <div class="step-title">🚦 A. Traffic Generator Start</div>
+                <div class="step-desc">
+                    • File: <span class="code">mininet_twin/traffic/generator.py</span><br>
+                    • <span class="code">traffic_gen.start()</span> → Khởi động thread daemon<br>
+                    • <span class="code">_start_servers()</span> → Kill iperf cũ, chạy <span class="code">iperf -s -u &</span><br>
+                    • <span class="code">_traffic_loop()</span> → Vòng lặp vô hạn
+                </div>
+            </div>
+            
+            <div class="changed">
+                <strong>⚠️ THAY ĐỔI QUAN TRỌNG - LOCK MECHANISM:</strong><br>
+                • Trước khi gửi lệnh iperf, kiểm tra <span class="code">hasattr(src, 'lock')</span><br>
+                • Nếu có lock → <span class="code">with src.lock:</span> để tránh xung đột<br>
+                • Kiểm tra <span class="code">src.shell</span> và <span class="code">src.waiting</span> trước khi thực thi<br>
+                • Try-catch bao quanh mọi lệnh cmd để tránh crash
+            </div>
+            
+            <div class="info">
+                <strong>🔁 Traffic Loop (Chạy liên tục):</strong><br>
+                • Random chọn 2 host khác nhau: <span class="code">random.sample(net.hosts, 2)</span><br>
+                • Random bandwidth từ list: [5, 10, 20, 50, 80, 120] Mbps<br>
+                • Random duration: 2-5 giây<br>
+                • Lệnh: <span class="code">iperf -c {dst.IP()} -u -b {bw}M -t {duration} &</span><br>
+                • Sleep: 0.5-2s giữa các lần tạo traffic
+            </div>
+            
+            <div class="step">
+                <div class="step-title">🔍 B. Background Latency Measurement</div>
+                <div class="step-desc">
+                    • File: <span class="code">mininet_twin/collectors/network_stats.py</span><br>
+                    • <span class="code">start_background_measurement(net)</span> → Thread daemon riêng<br>
+                    • Chạy <span class="code">_measurement_loop()</span><br>
+                    • <strong class="highlight">RANDOM SAMPLING:</strong> Random chọn MAX_SAMPLES_PER_CYCLE (10) cặp host<br>
+                    • Ping với <span class="code">-c 1 -W 0.1</span> (1 packet, timeout 0.1s)<br>
+                    • Parse latency, loss, jitter (mdev) từ output<br>
+                    • <strong>Dùng Lock khi ping:</strong> <span class="code">with h_src.lock:</span><br>
+                    • Lưu vào <span class="code">_metrics_cache</span> (thread-safe với <span class="code">_cache_lock</span>)<br>
+                    • Interval: 1 giây
+                </div>
+            </div>
+        </div>
+
+        <!-- PHASE 3: DATA COLLECTION -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">3</div>
+                <div class="phase-title">THU THẬP DỮ LIỆU (Main Loop)</div>
+                <div class="phase-time">⏱️ Mỗi 1 giây</div>
+            </div>
+            
+            <div class="warning">
+                <strong>⚠️ VÒNG LẶP CHÍNH - QUAN TRỌNG NHẤT:</strong><br>
+                File: <span class="code">mininet_twin/main.py</span> → Hàm <span class="code">run_simulation()</span><br>
+                Loop vô hạn chạy mỗi <span class="code">SYNC_INTERVAL</span> (mặc định 1s)<br>
+                <strong class="highlight">WARM-UP:</strong> Sleep 3s sau khi start traffic để hệ thống ổn định
+            </div>
+            
+            <div class="changed">
+                <strong>🔥 THAY ĐỔI: Tính Real Interval</strong><br>
+                • Dùng <span class="code">time.monotonic()</span> thay vì sleep cố định<br>
+                • Tính <span class="code">real_interval = current_time - last_check_time</span><br>
+                • Tránh lỗi chia cho 0: <span class="code">if real_interval < 0.001: real_interval = 0.001</span><br>
+                • Đảm bảo tính toán throughput chính xác hơn
+            </div>
+            
+            <table class="frequency-table">
+                <thead>
+                    <tr>
+                        <th>Thao tác</th>
+                        <th>File / Hàm</th>
+                        <th>Tần suất</th>
+                        <th>Cải tiến mới</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="highlight">1. Thu thập CPU</td>
+                        <td><span class="code">collectors/host_stats.py</span><br>
+                            <span class="code">get_host_cpu_usage()</span>
+                        </td>
+                        <td class="highlight">Mỗi 1s</td>
+                        <td>
+                            <strong>Cgroups-based measurement:</strong><br>
+                            • Đọc <span class="code">/sys/fs/cgroup/cpuacct.usage</span><br>
+                            • Tính delta CPU usage dựa trên nanoseconds<br>
+                            • Fallback: Dùng <span class="code">ps -p {pid}</span> nếu không có cgroup<br>
+                            • Cache giá trị cũ trong <span class="code">_cpu_tracker</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="highlight">2. Thu thập Memory</td>
+                        <td><span class="code">get_host_memory_usage()</span></td>
+                        <td class="highlight">Mỗi 1s</td>
+                        <td>
+                            • Chạy <span class="code">free -m</span><br>
+                            • Parse output với regex: <span class="code">re.findall(r'\d+', line)</span><br>
+                            • Tính % thực: <span class="code">(used/total) * 100</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="highlight">3. Thu thập Link Bandwidth</td>
+                        <td><span class="code">collectors/link_stats.py</span><br>
+                            <span class="code">collect_link_metrics()</span>
+                        </td>
+                        <td class="highlight">Mỗi 1s</td>
+                        <td>
+                            <strong>Exponential Moving Average (EMA):</strong><br>
+                            • ALPHA = 0.7 (70% giá trị mới, 30% giá trị cũ)<br>
+                            • <span class="code">smoothed = current*0.7 + old*0.3</span><br>
+                            • Giảm nhiễu (noise), tránh số liệu nhảy lung tung<br>
+                            • <strong>Timeout protection:</strong> <span class="code">timeout 0.2s cat /proc/net/dev</span><br>
+                            • Dùng Lock khi đọc: <span class="code">with node.lock:</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="highlight">4. Thu thập Switch Stats</td>
+                        <td><span class="code">collectors/switch_stats.py</span><br>
+                            <span class="code">collect_switch_port_stats()</span>
+                        </td>
+                        <td class="highlight">Mỗi 5s</td>
+                        <td>
+                            • <strong>Caching:</strong> Chỉ gọi lại sau 5s (giảm overhead)<br>
+                            • Chạy <span class="code">ovs-ofctl dump-ports {switch}</span><br>
+                            • Parse RX/TX packets, bytes, dropped, errors<br>
+                            • Lưu full metadata: switch_name, port_name
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="highlight">5. Lấy Latency/Loss</td>
+                        <td><span class="code">collectors/network_stats.py</span><br>
+                            <span class="code">measure_path_metrics()</span>
+                        </td>
+                        <td class="highlight">Instant</td>
+                        <td>
+                            • Đọc từ <span class="code">_metrics_cache.copy()</span><br>
+                            • KHÔNG chờ Ping (background thread đã làm)<br>
+                            • Return ngay lập tức (non-blocking)
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div class="step">
+                <div class="step-title">📦 Tạo Telemetry Batch</div>
+                <div class="step-desc">
+                    • Tổng hợp tất cả dữ liệu vào 1 dictionary:<br>
+                    <span class="code">
+                    telemetry_batch = {<br>
+                    &nbsp;&nbsp;"timestamp": time.time(),<br>
+                    &nbsp;&nbsp;"hosts": [{"name", "cpu", "mem"}, ...],<br>
+                    &nbsp;&nbsp;"links": [{"id", "bw"}, ...],<br>
+                    &nbsp;&nbsp;"switches": [{"name", "ports": {...}}, ...],<br>
+                    &nbsp;&nbsp;"latency": [{"pair", "latency", "loss", "jitter"}, ...]<br>
+                    }
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- PHASE 4: DATA TRANSMISSION -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">4</div>
+                <div class="phase-title">TRUYỀN DỮ LIỆU → BACKEND</div>
+                <div class="phase-time">⏱️ Mỗi 1 giây</div>
+            </div>
+            
+            <div class="flow-diagram">
+                <div class="flow-box">Mininet<br><span class="code">socket_client.send_telemetry()</span></div>
+                <div class="arrow">⬇️</div>
+                <div class="flow-box">WebSocket Emit<br><span class="code">mininet_telemetry</span></div>
+                <div class="arrow">⬇️</div>
+                <div class="flow-box">Backend SocketIO<br><span class="code">handle_mininet_telemetry()</span></div>
+            </div>
+            
+            <div class="step">
+                <div class="step-title">🧠 Backend xử lý Batch</div>
+                <div class="step-desc">
+                    • File: <span class="code">backend/app/events/socket_events.py</span><br>
+                    • Event: <span class="code">@socketio.on('mininet_telemetry')</span><br><br>
+                    
+                    <strong>A. Ghi vào InfluxDB (Background Worker):</strong><br>
+                    • Push vào <span class="code">telemetry_queue</span> (Queue với maxsize=100)<br>
+                    • <strong class="highlight">Queue Full Protection:</strong> Timeout 0.1s, drop data nếu đầy<br>
+                    • Worker thread tự động ghi → Non-blocking<br>
+                    • <strong>Error handling:</strong> Đếm lỗi liên tiếp, sleep 10s nếu > 10 lỗi<br>
+                    • Log queue size nếu > 50% capacity<br><br>
+                    
+                    <strong>B. Cập nhật Digital Twin (với Lock):</strong><br>
+                    • <span class="code">with data_lock:</span> (critical section)<br>
+                    • <strong>Hosts:</strong><br>
+                    &nbsp;&nbsp;→ Set status='up' nếu nhận được data (was_offline tracking)<br>
+                    &nbsp;&nbsp;→ Update CPU, Memory với timestamp từ batch<br>
+                    &nbsp;&nbsp;→ Broadcast <span class="code">host_updated</span> nếu status thay đổi<br>
+                    • <strong>Links:</strong><br>
+                    &nbsp;&nbsp;→ <span class="code">previous_status = link.status</span> (lưu trước khi update)<br>
+                    &nbsp;&nbsp;→ Gọi <span class="code">update_performance_metrics()</span><br>
+                    &nbsp;&nbsp;→ <strong class="highlight">Detection:</strong> Nếu status thay đổi → Broadcast ngay<br>
+                    &nbsp;&nbsp;→ Xử lý throughput <= 0.1 Mbps → Force status='down'<br>
+                    • <strong>Switches:</strong><br>
+                    &nbsp;&nbsp;→ Gọi <span class="code">heartbeat(timestamp)</span><br>
+                    &nbsp;&nbsp;→ Update <span class="code">port_stats</span> nếu có<br>
+                    • <strong>Latency:</strong><br>
+                    &nbsp;&nbsp;→ Lưu vào <span class="code">digital_twin.update_path_metrics()</span><br><br>
+                    
+                    <strong>C. Broadcast cho Frontend:</strong><br>
+                    • Tạo <span class="code">frontend_data</span> từ Digital Twin state<br>
+                    • Include status từ Backend (not raw Mininet data)<br>
+                    • <span class="code">socketio.emit('network_batch_update', frontend_data)</span>
+                </div>
+            </div>
+            
+            <div class="new-feature">
+                <h4>✨ TÍNH NĂNG MỚI: InfluxDB Background Writer</h4>
+                • File: <span class="code">backend/app/services/influx_service.py</span><br>
+                • Batch size: 500 points hoặc flush mỗi 1s<br>
+                • Ghi 3 measurements:<br>
+                &nbsp;&nbsp;→ <strong>host_metrics:</strong> cpu_usage, memory_usage (tag: host_name)<br>
+                &nbsp;&nbsp;→ <strong>link_metrics:</strong> throughput_mbps, packet_loss_percent (tags: link_id, src_node, dst_node)<br>
+                &nbsp;&nbsp;→ <strong>path_metrics:</strong> latency_ms, packet_loss_percent, jitter_ms (tag: pair_id)<br>
+                • Timestamp precision: nanoseconds<br>
+                • Write Options: retry_interval=5000ms
+            </div>
+        </div>
+
+        <!-- PHASE 5: FRONTEND UPDATE -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">5</div>
+                <div class="phase-title">CẬP NHẬT GIAO DIỆN</div>
+                <div class="phase-time">⏱️ Mỗi 1 giây</div>
+            </div>
+            
+            <div class="step">
+                <div class="step-title">📡 Frontend nhận WebSocket</div>
+                <div class="step-desc">
+                    • File: <span class="code">frontend/src/App.vue</span><br>
+                    • Event: <span class="code">socket.on('network_batch_update', (batchData) => {...})</span><br>
+                    • Kiểm tra <span class="code">networkData.value</span> đã khởi tạo chưa
+                </div>
+            </div>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">🔄 Cập nhật Hosts</div>
+                    <div class="step-desc">
+                        • Duyệt <span class="code">batchData.hosts</span><br>
+                        • Tìm node trong <span class="code">networkData.value.graph_data.nodes</span><br>
+                        • <strong class="highlight">Validation:</strong> Kiểm tra node không bị gán nhầm group<br>
+                        • Merge dữ liệu: <span class="code">node.details = {...node.details, cpu, mem, status}</span><br>
+                        • Lấy status trực tiếp từ backend (không tính toán lại)<br>
+                        • Logic group:<br>
+                        &nbsp;&nbsp;→ <span class="code">status === 'high-load'</span> → 'host-high-load'<br>
+                        &nbsp;&nbsp;→ <span class="code">status === 'offline'</span> → 'host-offline'<br>
+                        &nbsp;&nbsp;→ Else → 'host'
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">🔗 Cập nhật Links</div>
+                    <div class="step-desc">
+                        • Duyệt <span class="code">batchData.links</span><br>
+                        • Tìm edge trong <span class="code">graph_data.edges</span><br>
+                        • Lấy <span class="code">bandwidth_capacity</span> từ edge.details<br>
+                        • <strong class="highlight">FIX QUAN TRỌNG:</strong> Kiểm tra throughput <= 0.1 Mbps<br>
+                        • Nếu throughput = 0 → Force:<br>
+                        &nbsp;&nbsp;→ <span class="code">edge.label = 'DOWN'</span><br>
+                        &nbsp;&nbsp;→ <span class="code">edge.utilization = 0</span><br>
+                        &nbsp;&nbsp;→ <span class="code">edge.status = 'down'</span><br>
+                        • Nếu throughput > 0:<br>
+                        &nbsp;&nbsp;→ Tính utilization: <span class="code">(bw / capacity) * 100</span><br>
+                        &nbsp;&nbsp;→ <span class="code">edge.label = `${bw.toFixed(1)} Mbps`</span><br>
+                        &nbsp;&nbsp;→ <strong>Lấy status từ Backend:</strong> <span class="code">edge.status = lData.status</span><br>
+                        • Update <span class="code">edge.details.status</span> đồng bộ
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">🖥️ Cập nhật Switches</div>
+                    <div class="step-desc">
+                        • Duyệt <span class="code">batchData.switches</span><br>
+                        • Tìm node trong graph_data.nodes<br>
+                        • Heartbeat nhận được → <span class="code">node.details.status = 'up'</span><br>
+                        • Reset group về 'switch' (nếu trước đó offline)
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">🎨 Re-render vis-network</div>
+                    <div class="step-desc">
+                        • File: <span class="code">frontend/src/components/TopologyView.vue</span><br>
+                        • <span class="code">watch(graphDataString, ...)</span> trigger<br>
+                        • Gọi <span class="code">processNodes()</span> và <span class="code">processEdges()</span><br>
+                        • <span class="code">networkInstance.value.body.data.nodes.update(processedNodes)</span><br>
+                        • <span class="code">networkInstance.value.body.data.edges.update(processedEdges)</span><br>
+                        • Sơ đồ tự động cập nhật màu/label/shadow mà không reload page
+                    </div>
+                </div>
+            </div>
+            
+            <div class="new-feature">
+                <h4>✨ CẢI TIẾN: Edge Processing Logic</h4>
+                • File: <span class="code">TopologyView.vue</span> → <span class="code">processEdges()</span><br>
+                • <strong>Ưu tiên xử lý theo status:</strong><br>
+                1. Status = 'down' hoặc 'offline' → Gray, dashed, label='DOWN'<br>
+                2. Throughput <= 0.1 Mbps → Force DOWN (override status)<br>
+                3. Status = 'high-load' → Red (#F60000), width=4, shadow red<br>
+                4. Status = 'warning' → Orange (#f97316), width=3.5, shadow orange<br>
+                5. Status = 'up' → Cyan (#00F7F7), width=2.5, shadow if utilization > 0<br>
+                • <strong>Font config:</strong> strokeWidth=3, strokeColor=#0f172a (readability)
+            </div>
+            
+            <div class="changed">
+                <strong>🔥 FIX: Node Group Detection</strong><br>
+                • File: <span class="code">TopologyView.vue</span> → <span class="code">processNodes()</span><br>
+                • <strong>Root Cause:</strong> Node group bị gán nhầm do đọc từ <span class="code">node.group</span> cũ<br>
+                • <strong>Solution:</strong><br>
+                &nbsp;&nbsp;→ Xác định loại node từ ID: <span class="code">isHost = node.id.startsWith('h')</span><br>
+                &nbsp;&nbsp;→ Xác định loại node từ ID: <span class="code">isSwitch = node.id.startsWith('s')</span><br>
+                &nbsp;&nbsp;→ Gán group dựa trên (isHost/isSwitch) + status, KHÔNG dùng node.group cũ<br>
+                • <strong>Groups:</strong><br>
+                &nbsp;&nbsp;→ Host: 'host', 'host-offline', 'host-high-load'<br>
+                &nbsp;&nbsp;→ Switch: 'switch', 'switch-offline', 'switch-high-load'
+            </div>
+        </div>
+
+        <!-- PHASE 6: REAPER THREAD -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">6</div>
+                <div class="phase-title">GIÁM SÁT TIMEOUT (Reaper Thread)</div>
+                <div class="phase-time">⏱️ Mỗi 3 giây</div>
+            </div>
+            
+            <div class="warning">
+                <strong>⚠️ THREAD ĐỘC LẬP - QUAN TRỌNG:</strong><br>
+                File: <span class="code">backend/app/services/monitor_service.py</span><br>
+                Hàm: <span class="code">check_device_status_loop()</span><br>
+                Mục đích: Đánh dấu thiết bị OFFLINE nếu không nhận được heartbeat sau 6s<br>
+                Khởi động: <span class="code">start_monitoring_service()</span> trong <span class="code">create_app()</span>
+            </div>
+            
+            <div class="step">
+                <div class="step-title">🔍 Logic kiểm tra</div>
+                <div class="step-desc">
+                    • So sánh <span class="code">datetime.now() - device.last_update_time</span><br>
+                    • TIMEOUT_SECONDS = 6 giây<br>
+                    • Nếu > timeout:<br><br>
+                    
+                    <strong>→ Hosts:</strong><br>
+                    &nbsp;&nbsp;• <span class="code">host.set_status('offline')</span><br>
+                    &nbsp;&nbsp;• <span class="code">socketio.emit('host_updated', host.to_json())</span><br>
+                    &nbsp;&nbsp;• Frontend nhận → Set group='host-offline'<br><br>
+                    
+                    <strong>→ Switches:</strong><br>
+                    &nbsp;&nbsp;• <span class="code">switch.set_status('offline')</span><br>
+                    &nbsp;&nbsp;• <span class="code">socketio.emit('switch_updated', switch.to_json())</span><br>
+                    &nbsp;&nbsp;• Frontend nhận → Set group='switch-offline'<br><br>
+                    
+                    <strong>→ Links:</strong><br>
+                    &nbsp;&nbsp;• <span class="code">link.set_status('down')</span><br>
+                    &nbsp;&nbsp;• <span class="code">socketio.emit('link_updated', link.to_json())</span><br>
+                    &nbsp;&nbsp;• Frontend nhận → Set label='DOWN', color=gray, dashed
+                </div>
+            </div>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">📡 Frontend Event Handlers</div>
+                    <div class="step-desc">
+                        • <strong>host_updated:</strong><br>
+                        &nbsp;&nbsp;→ Tìm node trong graph_data.nodes<br>
+                        &nbsp;&nbsp;→ <span class="code">Object.assign(node.details, hostData)</span><br>
+                        &nbsp;&nbsp;→ Update group dựa trên status<br><br>
+                        
+                        • <strong>switch_updated:</strong><br>
+                        &nbsp;&nbsp;→ Tương tự host_updated<br><br>
+                        
+                        • <strong>link_updated:</strong><br>
+                        &nbsp;&nbsp;→ Tìm edge trong graph_data.edges<br>
+                        &nbsp;&nbsp;→ <span class="code">Object.assign(edge.details, linkData)</span><br>
+                        &nbsp;&nbsp;→ Update status, utilization, label<br>
+                        &nbsp;&nbsp;→ <strong>Force label='DOWN' nếu status='down' hoặc throughput=0</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PHASE 7: ANALYTICS VIEW -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">7</div>
+                <div class="phase-title">ANALYTICS DASHBOARD (NEW)</div>
+                <div class="phase-time">⏱️ On Demand</div>
+            </div>
+            
+            <div class="new-feature">
+                <h4>✨ TÍNH NĂNG MỚI: Grafana Integration</h4>
+                • Component: <span class="code">frontend/src/components/analytics/AnalyticsView.vue</span><br>
+                • Component: <span class="code">frontend/src/components/analytics/GrafanaPanel.vue</span><br>
+                • Base URL: <span class="code">VITE_GRAFANA_URL</span> (default: http://localhost:3000)
+            </div>
+            
+            <div class="step">
+                <div class="step-title">📊 Dashboard Structure</div>
+                <div class="step-desc">
+                    • <strong>3 Dashboard tabs:</strong><br>
+                    1. <strong>Overview:</strong> Tổng quan mạng (CPU + Links + Status Table)<br>
+                    2. <strong>Host Performance:</strong> CPU/Memory time series + Status<br>
+                    3. <strong>Link Performance:</strong> Throughput + Packet Loss + Table<br><br>
+                    
+                    • Icons: Inline SVG components (HostIcon, LinkIcon, OverviewIcon)<br>
+                    • Layout: CSS Grid với <span class="code">grid-template-columns: repeat(auto-fit, minmax(500px, 1fr))</span>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-title">🔗 Grafana Embed URL Generation</div>
+                <div class="step-desc">
+                    • Function: <span class="code">getEmbedUrl(dashboardUid, panelId)</span><br>
+                    • Format: <span class="code">{GRAFANA_URL}/d-solo/{uid}?orgId=1&panelId={id}&...</span><br>
+                    • Parameters:<br>
+                    &nbsp;&nbsp;→ from=now-5m, to=now<br>
+                    &nbsp;&nbsp;→ theme=dark<br>
+                    &nbsp;&nbsp;→ refresh=1s<br>
+                    &nbsp;&nbsp;→ var-host_name=All<br><br>
+                    
+                    • <strong>Dashboard UIDs:</strong><br>
+                    &nbsp;&nbsp;→ Host Performance: <span class="code">adrnqwx</span><br>
+                    &nbsp;&nbsp;→ Link Performance: <span class="code">add97wb</span>
+                </div>
+            </div>
+            
+            <div class="changed">
+                <strong>🔥 FIX: Grafana Iframe Loading Issues</strong><br>
+                • <strong>Vấn đề:</strong> Iframe bị block hoặc không load<br>
+                • <strong>Solution:</strong><br>
+                1. Docker Compose Environment Variables:<br>
+                &nbsp;&nbsp;→ <span class="code">GF_SECURITY_ALLOW_EMBEDDING=true</span><br>
+                &nbsp;&nbsp;→ <span class="code">GF_SECURITY_CONTENT_SECURITY_POLICY=false</span><br>
+                &nbsp;&nbsp;→ <span class="code">GF_AUTH_ANONYMOUS_ENABLED=true</span><br>
+                &nbsp;&nbsp;→ <span class="code">GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer</span><br><br>
+                
+                2. GrafanaPanel.vue Structure:<br>
+                &nbsp;&nbsp;→ Iframe LUÔN tồn tại (không dùng v-if)<br>
+                &nbsp;&nbsp;→ Loading overlay chồng LÊN iframe (z-index:10)<br>
+                &nbsp;&nbsp;→ Position relative container + absolute iframe<br>
+                &nbsp;&nbsp;→ Force reload bằng <span class="code">:key="iframeKey"</span>
+            </div>
+        </div>
+
+        <!-- SUMMARY TABLE -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">📊</div>
+                <div class="phase-title">TỔNG QUAN TẦN SUẤT HOẠT ĐỘNG (CẬP NHẬT)</div>
+            </div>
+            
+            <table class="frequency-table">
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Hành động</th>
+                        <th>Tần suất</th>
+                        <th>Cải tiến</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Traffic Generator</strong></td>
+                        <td>Tạo iPerf traffic ngẫu nhiên</td>
+                        <td class="highlight">0.5-2s/lần</td>
+                        <td>
+                            • Validation: Check shell & waiting state<br>
+                            • Lock protection: <span class="code">with src.lock</span><br>
+                            • Try-catch bao quanh mọi cmd
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Latency Thread</strong></td>
+                        <td>Random sampling ping</td>
+                        <td class="highlight">1s (10 cặp)</td>
+                        <td>
+                            • Random chọn 10 cặp thay vì duyệt hết<br>
+                            • Timeout: -W 0.1s<br>
+                            • Lock protection khi ping<br>
+                            • Parse jitter từ mdev
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Mininet Main Loop</strong></td>
+                        <td>Thu thập CPU, Memory, Links</td>
+                        <td class="highlight">1s (real interval)</td>
+                        <td>
+                            • Warm-up 3s trước khi bắt đầu<br>
+                            • Tính real_interval với monotonic()<br>
+                            • Log: Total BW + Avg CPU
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>CPU Collection</strong></td>
+                        <td>Cgroups-based measurement</td>
+                        <td class="highlight">1s</td>
+                        <td>
+                            • Đọc cpuacct.usage (nanoseconds)<br>
+                            • Tính delta usage<br>
+                            • Fallback: ps -p {pid}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Link Collection</strong></td>
+                        <td>EMA smoothing</td>
+                        <td class="highlight">1s</td>
+                        <td>
+                            • ALPHA=0.7 (70% new, 30% old)<br>
+                            • Timeout 0.2s protection<br>
+                            • Lock protection
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Switch Stats</strong></td>
+                        <td>ovs-ofctl dump-ports</td>
+                        <td class="highlight">5s (cached)</td>
+                        <td>
+                            • Cache result for 5s<br>
+                            • Full metadata: switch_name, port_name
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>WebSocket Transmission</strong></td>
+                        <td>Gửi telemetry_batch</td>
+                        <td class="highlight">1s</td>
+                        <td>
+                            • Reconnection: enabled<br>
+                            • Max attempts: infinite<br>
+                            • Delay: 1-5s
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Backend Processing</strong></td>
+                        <td>Update Digital Twin + Broadcast</td>
+                        <td class="highlight">1s</td>
+                        <td>
+                            • Lock protection: data_lock<br>
+                            • Status change detection<br>
+                            • Instant broadcast on change
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Frontend Re-render</strong></td>
+                        <td>Cập nhật vis-network</td>
+                        <td class="highlight">1s</td>
+                        <td>
+                            • Watch graphDataString<br>
+                            • Process nodes/edges<br>
+                            • Update without reload
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Reaper Thread</strong></td>
+                        <td>Kiểm tra timeout</td>
+                        <td class="highlight">3s</td>
+                        <td>
+                            • Timeout: 6s<br>
+                            • Broadcast on status change<br>
+                            • Handle hosts, switches, links
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>InfluxDB Writer</strong></td>
+                        <td>Background queue worker</td>
+                        <td class="highlight">Batch 500 / 1s</td>
+                        <td>
+                            • Queue maxsize: 100<br>
+                            • Timeout: 0.1s (drop if full)<br>
+                            • Error tracking: sleep 10s after 10 errors<br>
+                            • Queue size monitoring
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- KEY IMPROVEMENTS -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">🚀</div>
+                <div class="phase-title">CÁC CẢI TIẾN CHÍNH</div>
+            </div>
+            
+            <div class="success">
+                <strong>1. Thread Safety & Concurrency:</strong><br>
+                • Threading.Lock cho mỗi host (tránh race condition)<br>
+                • data_lock cho Digital Twin updates<br>
+                • _cache_lock cho latency metrics<br>
+                • Queue-based InfluxDB writer (non-blocking)
+            </div>
+            
+            <div class="success">
+                <strong>2. Performance Optimization:</strong><br>
+                • EMA smoothing cho link throughput (giảm noise)<br>
+                • Random sampling cho latency (thay vì full mesh)<br>
+                • Switch stats caching (5s interval)<br>
+                • Background measurement threads<br>
+                • Real interval calculation (thay vì sleep cố định)
+            </div>
+            
+            <div class="success">
+                <strong>3. Robustness & Error Handling:</strong><br>
+                • Timeout protection: 0.1-0.2s cho network operations<br>
+                • Shell validation trước khi thực thi cmd<br>
+                • Queue overflow protection (drop data thay vì crash)<br>
+                • Consecutive error tracking (sleep khi quá nhiều lỗi)<br>
+                • Try-catch bao quanh mọi critical operations
+            </div>
+            
+            <div class="success">
+                <strong>4. UI/UX Improvements:</strong><br>
+                • Multi-view support (Live Monitoring + Analytics)<br>
+                • Grafana integration với 3 dashboards<br>
+                • Real-time status detection và broadcast<br>
+                • Node group auto-correction (fix misidentification)<br>
+                • Link status priorities (down > high-load > warning > up)
+            </div>
+            
+            <div class="success">
+                <strong>5. Data Accuracy:</strong><br>
+                • Cgroups-based CPU measurement (chính xác hơn)<br>
+                • Real memory usage từ free command<br>
+                • Jitter measurement từ ping mdev<br>
+                • Throughput smoothing với EMA<br>
+                • Status từ Backend (single source of truth)
+            </div>
+        </div>
+
+        <!-- CRITICAL PATHS -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">⚠️</div>
+                <div class="phase-title">CRITICAL PATHS & DEPENDENCIES</div>
+            </div>
+            
+            <div class="warning">
+                <strong>1. Lock Hierarchy (Tránh Deadlock):</strong><br>
+                • Host.lock (per-host) → data_lock (global) → _cache_lock (metrics)<br>
+                • KHÔNG bao giờ acquire locks theo thứ tự ngược lại<br>
+                • Always release locks trong finally block
+            </div>
+            
+            <div class="warning">
+                <strong>2. WebSocket Event Order:</strong><br>
+                • <span class="code">initial_state</span> PHẢI được xử lý trước batch_update<br>
+                • Frontend PHẢI kiểm tra networkData !== null<br>
+                • Status updates PHẢI được broadcast riêng (host_updated, link_updated)
+            </div>
+            
+            <div class="warning">
+                <strong>3. Timing Dependencies:</strong><br>
+                • Warm-up 3s sau khi start traffic<br>
+                • Reaper timeout (6s) > batch interval (1s)<br>
+                • Queue timeout (0.1s) < batch interval (1s)<br>
+                • Switch cache (5s) > batch interval (1s)
+            </div>
+            
+            <div class="warning">
+                <strong>4. Data Consistency:</strong><br>
+                • Status LUÔN lấy từ Backend (không tính lại ở Frontend)<br>
+                • Throughput = 0 → Force status='down' (override Backend)<br>
+                • Node group based on ID prefix (không dùng group cũ)<br>
+                • Link status priorities: down > offline > high-load > warning > up
+            </div>
+        </div>
+
+        <!-- SHUTDOWN PHASE -->
+        <div class="phase">
+            <div class="phase-header">
+                <div class="phase-number">🛑</div>
+                <div class="phase-title">KẾT THÚC ỨNG DỤNG (Ctrl+C)</div>
+            </div>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">1. Stop Background Threads</div>
+                    <div class="step-desc">
+                        • <span class="code">network_stats.stop_background_measurement()</span><br>
+                        • Set <span class="code">_stop_event</span><br>
+                        • Join thread với timeout 2s
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">2. Stop Traffic Generator</div>
+                    <div class="step-desc">
+                        • <span class="code">traffic_gen.stop()</span><br>
+                        • Set <span class="code">running=False</span><br>
+                        • Kill all iperf processes: <span class="code">killall iperf</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">3. Disconnect WebSocket</div>
+                    <div class="step-desc">
+                        • <span class="code">socket_client.disconnect()</span><br>
+                        • Close SocketIO connection gracefully
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">4. Stop Mininet</div>
+                    <div class="step-desc">
+                        • <span class="code">net.stop()</span><br>
+                        • Clean up OVS switches<br>
+                        • Remove network namespaces
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="step-title">5. Flush InfluxDB Queue</div>
+                    <div class="step-desc">
+                        • Worker thread tự động xử lý remaining items<br>
+                        • <span class="code">telemetry_queue.task_done()</span><br>
+                        • Close InfluxDB client connection
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div style="text-align: center; margin-top: 50px; padding: 30px; background: rgba(0, 247, 247, 0.1); border-radius: 12px;">
+            <h2 style="color: #00F7F7; margin-bottom: 15px;">📚 Document Version</h2>
+            <p style="font-size: 1.2em; color: #94a3b8;">
+                <strong>Updated:</strong> December 2024<br>
+                <strong>Status:</strong> Production Ready ✅<br>
+                <strong>Architecture:</strong> 3-tier (Mininet → Backend → Frontend)<br>
+                <strong>Key Technologies:</strong> Flask, SocketIO, Vue.js, vis-network, InfluxDB, Grafana
+            </p>
+        </div>
+    </div>
+</body>
+</html>
