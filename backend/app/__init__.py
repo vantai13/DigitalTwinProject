@@ -1,9 +1,14 @@
+# backend/app/__init__.py
+"""
+[CẬP NHẬT] Thêm logic attach SocketIO cho ActionLogger
+"""
+
 import os
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-from app.extensions import socketio
+from app.extensions import socketio, action_logger_service  # ← Thêm import
 from app.api.topology import topology_bp
 from app.api.device_updates import device_bp
 from app.events.socket_events import register_socket_events
@@ -37,9 +42,26 @@ def create_app():
         cors_allowed_origins=socketio_cors
     )
 
+    # ========================================
+    # [MỚI] ATTACH SOCKETIO CHO ACTION LOGGER
+    # ========================================
+    action_logger_service.set_socketio(socketio)
+    logger.info(">>> ActionLogger attached to SocketIO")
+
     # Register Blueprints
     app.register_blueprint(topology_bp, url_prefix='/api')
     app.register_blueprint(device_bp, url_prefix='/api')
+    
+    # [MỚI] Register Control Blueprint - CHÍNH THỨC
+    from app.api.control import control_bp
+    app.register_blueprint(control_bp, url_prefix='/api')
+    logger.info(">>> Control API endpoints registered")
+    
+    # [MỚI] Register Test Control Blueprint (chỉ dùng trong development)
+    if app.config['DEBUG']:
+        from app.api.test_control import test_control_bp
+        app.register_blueprint(test_control_bp, url_prefix='/api')
+        logger.info(">>> Test Control endpoints registered (DEBUG mode)")
 
     # Register Socket Events
     register_socket_events(socketio)
