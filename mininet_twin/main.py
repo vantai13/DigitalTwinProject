@@ -18,7 +18,8 @@ from services.api_client import TopologyApiClient
 from services.socket_client import SocketClient
 from traffic.generator import TrafficGenerator
 from dotenv import load_dotenv
-
+# [MỚI] Import Command Executor
+from controllers.command_executor import CommandExecutor
 
 load_dotenv()
 
@@ -47,6 +48,13 @@ def run_simulation():
    # tạo khóa 
     for h in net.hosts:
         h.lock = threading.Lock()
+
+    # ========================================
+    # [MỚI] KHỞI TẠO COMMAND EXECUTOR
+    # ========================================
+    command_executor = CommandExecutor(net)
+    socket_client.set_command_executor(command_executor)
+    logger.info("✅ CommandExecutor initialized and attached to SocketClient")
 
     #  Khởi tạo Traffic Generator
     traffic_gen = TrafficGenerator(net)

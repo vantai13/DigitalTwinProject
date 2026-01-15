@@ -1,261 +1,176 @@
-# backend/app/schemas/control_schemas.py
+# backend/app/models/action_log.py
 """
-JSON SCHEMAS FOR VALIDATION
-----------------------------
-MỤC ĐÍCH:
-- Validate dữ liệu từ Frontend TRƯỚC KHI xử lý
-- Tránh lỗi runtime (vd: bandwidth = -10, delay = "abc")
-- Đảm bảo dữ liệu đúng format
+MODEL: Action Log
+-----------------
+MỤC ĐÍCH: 
+- Lưu lại mọi hành động điều khiển (bật/tắt device, thay đổi bandwidth...)
+- Giống như "nhật ký" ghi lại ai đã làm gì, lúc nào, thành công hay thất bại
 
-SỬ DỤNG:
-- Import schema vào API endpoint
-- Dùng hàm validate_request_data() để kiểm tra
+CẤU TRÚC DỮ LIỆU:
+- action_id: ID duy nhất (vd: "act_1234567890")
+- timestamp: Thời gian thực hiện (ISO format)
+- action_type: Loại hành động (IMPORT_TOPOLOGY, TOGGLE_DEVICE, TOGGLE_LINK, UPDATE_LINK)
+- target: Thiết bị/link bị tác động (vd: "h1", "s1-s2")
+- parameters: Thông số (dict) - vd: {"bandwidth": 50, "delay": "10ms"}
+- status: Trạng thái (SUCCESS, FAILED, PENDING)
+- error_message: Thông báo lỗi (nếu thất bại)
+- user: Người thực hiện (optional - để sau này thêm authentication)
 """
 
-from jsonschema import validate, ValidationError
+import time
+from datetime import datetime
+from enum import Enum
 
 
-# ========================================
-# SCHEMA 1: IMPORT TOPOLOGY
-# ========================================
-IMPORT_TOPOLOGY_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "topology": {
-            "type": "object",
-            "properties": {
-                "hosts": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "ip": {"type": "string"},  # Có thể thêm regex pattern cho IP
-                            "mac": {"type": "string"}
-                        },
-                        "required": ["name", "ip", "mac"]
-                    }
-                },
-                "switches": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "dpid": {"type": "string"}
-                        },
-                        "required": ["name", "dpid"]
-                    }
-                },
-                "links": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "from": {"type": "string"},
-                            "to": {"type": "string"},
-                            "bw": {"type": "number", "minimum": 0}
-                        },
-                        "required": ["from", "to"]
-                    }
-                }
-            },
-            "required": ["hosts", "switches", "links"]
-        }
-    },
-    "required": ["topology"]
-}
+class ActionType(Enum):
+    """Các loại hành động có thể thực hiện"""
+    IMPORT_TOPOLOGY = "IMPORT_TOPOLOGY"       # Nhập topology mới từ JSON
+    TOGGLE_DEVICE = "TOGGLE_DEVICE"           # Bật/tắt host hoặc switch
+    TOGGLE_LINK = "TOGGLE_LINK"               # Bật/tắt link
+    UPDATE_LINK = "UPDATE_LINK"               # Thay đổi bandwidth/delay/loss của link
 
 
-# ========================================
-# SCHEMA 2: TOGGLE DEVICE
-# ========================================
-TOGGLE_DEVICE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "action": {
-            "type": "string",
-            "enum": ["enable", "disable"]  # Chỉ cho phép 2 giá trị này
-        }
-    },
-    "required": ["action"]
-}
+class ActionStatus(Enum):
+    """Trạng thái của hành động"""
+    PENDING = "PENDING"       # Đang chờ xử lý
+    SUCCESS = "SUCCESS"       # Thành công
+    FAILED = "FAILED"         # Thất bại
 
 
-# ========================================
-# SCHEMA 3: TOGGLE LINK
-# ========================================
-TOGGLE_LINK_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "action": {
-            "type": "string",
-            "enum": ["up", "down"]
-        }
-    },
-    "required": ["action"]
-}
-
-
-# ========================================
-# SCHEMA 4: UPDATE LINK CONDITIONS
-# ========================================
-UPDATE_LINK_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "bandwidth": {
-            "type": "number",
-            "minimum": 0.1,  # Phải lớn hơn 0
-            "description": "Bandwidth in Mbps"
-        },
-        "delay": {
-            "type": "string",
-            "pattern": "^\\d+(\\.\\d+)?(ms|us|s)$",  # Regex: "10ms", "5.5us", "1s"
-            "description": "Delay với đơn vị (vd: 10ms, 500us)"
-        },
-        "loss": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 100,  # % packet loss
-            "description": "Packet loss percentage (0-100)"
-        }
-    },
-    "minProperties": 1,  # Phải có ít nhất 1 trong 3 field
-    "additionalProperties": False  # Không cho phép field khác
-}
-
-
-# ========================================
-# HELPER FUNCTION: VALIDATE REQUEST DATA
-# ========================================
-def validate_request_data(data, schema):
+class ActionLog:
     """
-    Kiểm tra dữ liệu có hợp lệ theo schema không
+    Class đại diện cho 1 hành động điều khiển
     
-    Args:
-        data (dict): Dữ liệu cần validate (từ request.json)
-        schema (dict): JSON schema
+    VÍ DỤ SỬ DỤNG:
+    --------------
+    # Tạo action mới
+    action = ActionLog(
+        action_type=ActionType.TOGGLE_DEVICE,
+        target="h1",
+        parameters={"action": "disable"}
+    )
     
-    Returns:
-        tuple: (is_valid: bool, error_message: str or None)
+    # Cập nhật kết quả
+    action.mark_success()
+    # hoặc
+    action.mark_failed("Host h1 không tồn tại")
     
-    Example:
-        is_valid, error = validate_request_data(
-            request.json, 
-            TOGGLE_DEVICE_SCHEMA
-        )
-        if not is_valid:
-            return jsonify({"error": error}), 400
+    # Chuyển thành JSON để gửi cho Frontend
+    action_dict = action.to_dict()
     """
-    try:
-        validate(instance=data, schema=schema)
-        return True, None
-    except ValidationError as e:
-        # Tạo error message dễ đọc
-        error_msg = f"Validation failed: {e.message}"
-        if e.path:
-            field_path = ".".join(str(p) for p in e.path)
-            error_msg = f"Field '{field_path}': {e.message}"
-        return False, error_msg
+    
+    def __init__(self, action_type, target, parameters=None, user=None):
+        """
+        Khởi tạo Action Log mới
+        
+        Args:
+            action_type (ActionType): Loại hành động (enum)
+            target (str): Thiết bị/link bị tác động (vd: "h1", "s1-s2")
+            parameters (dict): Thông số kèm theo (vd: {"bandwidth": 50})
+            user (str): Người thực hiện (optional)
+        """
+        self.action_id = f"act_{int(time.time() * 1000)}"  # ID duy nhất dựa trên timestamp
+        self.timestamp = datetime.now().isoformat()         # Thời gian tạo (ISO 8601)
+        self.action_type = action_type.value                # Loại hành động (string)
+        self.target = target                                # Thiết bị/link
+        self.parameters = parameters or {}                  # Thông số (dict rỗng nếu không có)
+        self.status = ActionStatus.PENDING.value            # Mặc định là PENDING
+        self.error_message = None                           # Chưa có lỗi
+        self.user = user                                    # Người thực hiện (None nếu không có)
+        self.completed_at = None                            # Thời gian hoàn thành (sẽ set sau)
+    
+    def mark_success(self):
+        """Đánh dấu hành động thành công"""
+        self.status = ActionStatus.SUCCESS.value
+        self.completed_at = datetime.now().isoformat()
+        self.error_message = None
+    
+    def mark_failed(self, error_message):
+        """
+        Đánh dấu hành động thất bại
+        
+        Args:
+            error_message (str): Thông báo lỗi
+        """
+        self.status = ActionStatus.FAILED.value
+        self.completed_at = datetime.now().isoformat()
+        self.error_message = error_message
+    
+    def to_dict(self):
+        """
+        Chuyển object thành dictionary (để gửi qua API/WebSocket)
+        
+        Returns:
+            dict: Dictionary chứa toàn bộ thông tin
+        """
+        return {
+            "action_id": self.action_id,
+            "timestamp": self.timestamp,
+            "action_type": self.action_type,
+            "target": self.target,
+            "parameters": self.parameters,
+            "status": self.status,
+            "error_message": self.error_message,
+            "user": self.user,
+            "completed_at": self.completed_at
+        }
+    
+    def __repr__(self):
+        """String representation cho debug"""
+        return (f"ActionLog(id={self.action_id}, type={self.action_type}, "
+                f"target={self.target}, status={self.status})")
 
 
-# ========================================
-# DEMO: TESTING SCHEMAS
-# ========================================
+# ==========================================
+# DEMO: Cách sử dụng ActionLog
+# ==========================================
 if __name__ == "__main__":
-    print("=" * 70)
-    print("TEST 1: VALID TOGGLE_DEVICE REQUEST")
-    print("=" * 70)
+    # Test 1: Tạo action thành công
+    print("=" * 60)
+    print("TEST 1: Tạo action TOGGLE_DEVICE thành công")
+    print("=" * 60)
     
-    valid_data = {"action": "disable"}
-    is_valid, error = validate_request_data(valid_data, TOGGLE_DEVICE_SCHEMA)
-    print(f"Data: {valid_data}")
-    print(f"Valid: {is_valid}, Error: {error}\n")
+    action1 = ActionLog(
+        action_type=ActionType.TOGGLE_DEVICE,
+        target="h1",
+        parameters={"action": "disable"},
+        user="admin"
+    )
+    print(f"Action created: {action1}")
+    print(f"JSON: {action1.to_dict()}\n")
     
-    print("=" * 70)
-    print("TEST 2: INVALID TOGGLE_DEVICE REQUEST (wrong action)")
-    print("=" * 70)
+    # Giả lập xử lý thành công
+    time.sleep(0.5)
+    action1.mark_success()
+    print(f"After success: {action1.to_dict()}\n")
     
-    invalid_data = {"action": "turn_off"}  # Không nằm trong enum
-    is_valid, error = validate_request_data(invalid_data, TOGGLE_DEVICE_SCHEMA)
-    print(f"Data: {invalid_data}")
-    print(f"Valid: {is_valid}")
-    print(f"Error: {error}\n")
+    # Test 2: Tạo action thất bại
+    print("=" * 60)
+    print("TEST 2: Tạo action UPDATE_LINK thất bại")
+    print("=" * 60)
     
-    print("=" * 70)
-    print("TEST 3: VALID UPDATE_LINK REQUEST")
-    print("=" * 70)
+    action2 = ActionLog(
+        action_type=ActionType.UPDATE_LINK,
+        target="h1-s1",
+        parameters={"bandwidth": 50, "delay": "10ms"}
+    )
+    print(f"Action created: {action2}")
     
-    valid_link_data = {
-        "bandwidth": 50.5,
-        "delay": "10ms",
-        "loss": 2.0
-    }
-    is_valid, error = validate_request_data(valid_link_data, UPDATE_LINK_SCHEMA)
-    print(f"Data: {valid_link_data}")
-    print(f"Valid: {is_valid}, Error: {error}\n")
+    # Giả lập xử lý thất bại
+    time.sleep(0.3)
+    action2.mark_failed("Link h1-s1 không tồn tại trong Digital Twin")
+    print(f"After failed: {action2.to_dict()}\n")
     
-    print("=" * 70)
-    print("TEST 4: INVALID UPDATE_LINK REQUEST (bandwidth = 0)")
-    print("=" * 70)
+    # Test 3: Import topology
+    print("=" * 60)
+    print("TEST 3: Tạo action IMPORT_TOPOLOGY")
+    print("=" * 60)
     
-    invalid_link_data = {"bandwidth": 0}  # < 0.1
-    is_valid, error = validate_request_data(invalid_link_data, UPDATE_LINK_SCHEMA)
-    print(f"Data: {invalid_link_data}")
-    print(f"Valid: {is_valid}")
-    print(f"Error: {error}\n")
-    
-    print("=" * 70)
-    print("TEST 5: INVALID UPDATE_LINK REQUEST (delay wrong format)")
-    print("=" * 70)
-    
-    invalid_delay_data = {"delay": "10"}  # Thiếu đơn vị
-    is_valid, error = validate_request_data(invalid_delay_data, UPDATE_LINK_SCHEMA)
-    print(f"Data: {invalid_delay_data}")
-    print(f"Valid: {is_valid}")
-    print(f"Error: {error}\n")
-    
-    print("=" * 70)
-    print("TEST 6: INVALID UPDATE_LINK REQUEST (loss > 100)")
-    print("=" * 70)
-    
-    invalid_loss_data = {"loss": 150}  # Vượt quá 100%
-    is_valid, error = validate_request_data(invalid_loss_data, UPDATE_LINK_SCHEMA)
-    print(f"Data: {invalid_loss_data}")
-    print(f"Valid: {is_valid}")
-    print(f"Error: {error}\n")
-    
-    print("=" * 70)
-    print("TEST 7: VALID IMPORT_TOPOLOGY REQUEST")
-    print("=" * 70)
-    
-    valid_topology = {
-        "topology": {
-            "hosts": [
-                {"name": "h1", "ip": "10.0.0.1/24", "mac": "00:00:00:00:00:01"}
-            ],
-            "switches": [
-                {"name": "s1", "dpid": "0000000000000001"}
-            ],
-            "links": [
-                {"from": "h1", "to": "s1", "bw": 100}
-            ]
-        }
-    }
-    is_valid, error = validate_request_data(valid_topology, IMPORT_TOPOLOGY_SCHEMA)
-    print(f"Data: {valid_topology}")
-    print(f"Valid: {is_valid}, Error: {error}\n")
-    
-    print("=" * 70)
-    print("TEST 8: INVALID IMPORT_TOPOLOGY REQUEST (missing 'hosts')")
-    print("=" * 70)
-    
-    invalid_topology = {
-        "topology": {
-            "switches": [{"name": "s1", "dpid": "0000000000000001"}],
-            "links": []
-        }
-    }
-    is_valid, error = validate_request_data(invalid_topology, IMPORT_TOPOLOGY_SCHEMA)
-    print(f"Valid: {is_valid}")
-    print(f"Error: {error}\n")
+    action3 = ActionLog(
+        action_type=ActionType.IMPORT_TOPOLOGY,
+        target="topology.json",
+        parameters={"hosts": 5, "switches": 2}
+    )
+    print(f"Action created: {action3}")
+    action3.mark_success()
+    print(f"After success: {action3.to_dict()}")

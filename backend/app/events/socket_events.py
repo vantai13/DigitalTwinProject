@@ -2,7 +2,8 @@ import threading
 from sqlite3.dbapi2 import Timestamp
 from flask import request
 from flask_socketio import emit
-from app.extensions import digital_twin, data_lock # Import kho hàng chung
+from app.extensions import digital_twin, data_lock, action_logger_service  # ← Thêm import
+from app.models.action_log import ActionStatus  # ← Thêm import
 from app.utils.logger import get_logger
 from app.services.influx_service import influx_service
 import queue
@@ -187,3 +188,64 @@ def register_socket_events(socketio):
         socketio.emit('network_batch_update', frontend_data)
         
         logger.info(f"Đã nhận telemetry từ Mininet: {len(frontend_data['hosts'])} hosts")
+    
+    # ========================================
+    # [MỚI] XỬ LÝ COMMAND RESULT TỪ MININET
+    # ========================================
+    @socketio.on('command_result')
+    def handle_command_result(data):
+        """
+        Nhận kết quả từ Mininet sau khi thực thi lệnh
+        
+        Args:
+            data (dict): {
+                'success': True/False,
+                'action_id': 'act_123',
+                'command': 'toggle_device',
+                'message': 'Success message',
+                'error': 'Error message (if failed)',
+                'result': {...}  # Dữ liệu kết quả
+            }
+        """
+        action_id = data.get('action_id')
+        success = data.get('success', False)
+        command = data.get('command')
+        error_message = data.get('error')
+        result_data = data.get('result')
+        
+        logger.info(
+            f"[CONTROL] Received command result: {action_id} | "
+            f"Command: {command} | Success: {success}"
+        )
+        
+        if not action_id:
+            logger.warning("[CONTROL] Command result missing action_id")
+            return
+        
+        # Cập nhật Action Log
+        if success:
+            action_logger_service.update_action(
+                action_id=action_id,
+                status=ActionStatus.SUCCESS,
+                result_data=result_data
+            )
+            logger.info(f"[CONTROL] Action {action_id} marked as SUCCESS")
+        else:
+            action_logger_service.update_action(
+                action_id=action_id,
+                status=ActionStatus.FAILED,
+                error_message=error_message
+            )
+            logger.warning(f"[CONTROL] Action {action_id} marked as FAILED: {error_message}")
+        
+        # [OPTIONAL] Broadcast result tới Frontend
+        # Frontend đã nhận action_completed/action_failed từ ActionLogger
+        # Nhưng có thể emit thêm event riêng nếu cần
+        socketio.emit('control_result', {
+            'action_id': action_id,
+            'success': success,
+            'command': command,
+            'message': data.get('message'),
+            'error': error_message,
+            'result': result_data
+        })
