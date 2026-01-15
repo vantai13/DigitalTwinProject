@@ -11,6 +11,7 @@ import TopologyView from './components/TopologyView.vue'
 import InfoPanel from './components/InfoPanel.vue'
 import ViewSwitcher from './components/ViewSwitcher.vue'
 import AnalyticsView from './components/analytics/AnalyticsView.vue'
+import ControlPanel from './components/control/ControlPanel.vue'
 
 // ============================================
 // 1. CONFIGURATION FROM ENV
@@ -375,6 +376,13 @@ function handleViewChange(view) {
       <AnalyticsView />
     </div>
 
+    <!-- ============================================ -->
+    <!-- [MỚI] CONTROL PANEL VIEW                     -->
+    <!-- ============================================ -->
+    <div v-if="currentView === 'control'" class="control-container">
+      <ControlPanel />
+    </div>  
+
     <!-- LOADING STATE -->
     <div v-if="isLoading && connectionStatus !== 'error'" class="loading-container">
       <div class="loading-spinner"></div>
@@ -431,6 +439,19 @@ body, html {
   display: flex;
   flex: 1;
   overflow: hidden;
+}
+
+/* [MỚI] Style cho Control Container */
+.control-container {
+  flex: 1;
+  overflow-y: auto;
+  background-color: #0f172a;
+}
+
+.analytics-container,
+.control-container {
+  height: calc(100vh - 60px);
+  overflow-y: auto;
 }
 
 .loading-container {

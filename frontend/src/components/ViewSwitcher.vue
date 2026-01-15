@@ -12,11 +12,21 @@
       <span>Live Monitoring</span>
     </button>
 
+    <button
+      class="switch-btn"
+      :class="{ active: currentView === 'control' }"
+      @click="$emit('change-view', 'control')"
+    >
+      <span>Control Panel</span>
+    </button>
+
     <button 
       class="switch-btn" 
       :class="{ active: currentView === 'analytics' }"
       @click="$emit('change-view', 'analytics')"
     >
+    
+
       <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <line x1="12" y1="20" x2="12" y2="10"/>
         <line x1="18" y1="20" x2="18" y2="4"/>
