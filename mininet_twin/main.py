@@ -50,11 +50,14 @@ def run_simulation():
         h.lock = threading.Lock()
 
     # ========================================
-    # [MỚI] KHỞI TẠO COMMAND EXECUTOR
+    # ✅ FIX VẤN ĐỀ 3: KHỞI TẠO EXECUTOR TRƯỚC
     # ========================================
     command_executor = CommandExecutor(net)
-    socket_client.set_command_executor(command_executor)
-    logger.info("✅ CommandExecutor initialized and attached to SocketClient")
+    logger.info("✅ CommandExecutor initialized")
+
+    # ✅ KHỞI TẠO SOCKET CLIENT VỚI EXECUTOR
+    socket_client = SocketClient(SOCKET_URL, command_executor=command_executor)
+    logger.info("✅ SocketClient initialized with CommandExecutor")
 
     #  Khởi tạo Traffic Generator
     traffic_gen = TrafficGenerator(net)

@@ -1,21 +1,16 @@
-# backend/app/__init__.py
-"""
-[CẬP NHẬT] Thêm logic attach SocketIO cho ActionLogger
-"""
 
 import os
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-from app.extensions import socketio, action_logger_service  # ← Thêm import
+from app.extensions import socketio, action_logger_service
 from app.api.topology import topology_bp
 from app.api.device_updates import device_bp
 from app.events.socket_events import register_socket_events
 from app.services.monitor_service import start_monitoring_service
 from app.utils.logger import get_logger
 
-# Load biến môi trường
 load_dotenv()
 
 logger = get_logger()
@@ -23,7 +18,7 @@ logger = get_logger()
 def create_app():
     app = Flask(__name__)
     
-    # Load cấu hình từ .env
+    # Load cấu hình
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-secret-key')
     app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'False').lower() == 'true'
     app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 16777216))
@@ -43,21 +38,21 @@ def create_app():
     )
 
     # ========================================
-    # [MỚI] ATTACH SOCKETIO CHO ACTION LOGGER
+    # ✅ FIX: ATTACH SOCKETIO TRƯỚC KHI REGISTER BLUEPRINT
     # ========================================
     action_logger_service.set_socketio(socketio)
     logger.info(">>> ActionLogger attached to SocketIO")
 
-    # Register Blueprints
+    # ✅ SAU ĐÓ MỚI REGISTER BLUEPRINT
     app.register_blueprint(topology_bp, url_prefix='/api')
     app.register_blueprint(device_bp, url_prefix='/api')
     
-    # [MỚI] Register Control Blueprint - CHÍNH THỨC
+    # Register Control Blueprint
     from app.api.control import control_bp
     app.register_blueprint(control_bp, url_prefix='/api')
     logger.info(">>> Control API endpoints registered")
     
-    # [MỚI] Register Test Control Blueprint (chỉ dùng trong development)
+    # Register Test Control Blueprint (DEBUG mode only)
     if app.config['DEBUG']:
         from app.api.test_control import test_control_bp
         app.register_blueprint(test_control_bp, url_prefix='/api')
