@@ -32,7 +32,7 @@ class TrafficGenerator:
                 # Chọn ngẫu nhiên cặp Host (Src -> Dst)
                 src, dst = random.sample(self.net.hosts, 2)
 
-                # KIỂM TRA HOST TRƯỚC KHI SỬ DỤNG
+                # KIỂM TRA SRC 
                 if not hasattr(src, 'shell') or src.shell is None:
                     logger.warning(f"Host {src.name} không có shell hợp lệ, bỏ qua...")
                     time.sleep(1)
@@ -42,6 +42,35 @@ class TrafficGenerator:
                     logger.warning(f"Host {src.name} đang busy, bỏ qua...")
                     time.sleep(0.5)
                     continue
+
+                # ========================================
+                # [MỚI] KIỂM TRA DST - QUAN TRỌNG!
+                # ========================================
+                # Kiểm tra destination interface có UP không
+                dst_intf_name = dst.defaultIntf().name
+                
+                try:
+                    if hasattr(dst, 'lock'):
+                        with dst.lock:
+                            dst_status = dst.cmd(f'ip link show {dst_intf_name}')
+                    else:
+                        dst_status = dst.cmd(f'ip link show {dst_intf_name}')
+                    
+                    dst_is_up = 'state UP' in dst_status
+                    
+                    if not dst_is_up:
+                        logger.debug(f"[TRAFFIC] Destination {dst.name} interface DOWN, skip traffic")
+                        time.sleep(0.5)
+                        continue  # ← Bỏ qua cặp này, chọn cặp khác
+                
+                except Exception as e:
+                    logger.warning(f"[TRAFFIC] Error checking {dst.name} status: {e}")
+                    time.sleep(0.5)
+                    continue
+                
+                # ========================================
+                # CHỈ GỬI TRAFFIC NẾU CẢ SRC VÀ DST ĐỀU UP
+                # ========================================
                 
                 # Random băng thông và thời gian
                 bw_options = [5, 10, 20, 50, 80, 120] 

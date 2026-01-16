@@ -98,6 +98,18 @@ def register_socket_events(socketio):
             for h_data in data.get('hosts', []):
                 host = digital_twin.get_host(h_data['name'])
                 if host:
+                    if 'status' in h_data and h_data['status'] == 'offline':
+                        was_up = (host.status == 'up')
+                        host.set_status('offline')
+            
+                        # Broadcast ngay lập tức nếu status thay đổi
+                        if was_up:
+                            socketio.emit('host_updated', host.to_json())
+                            logger.info(f"🔴 Host {host.name} → OFFLINE (immediate broadcast)")
+
+                else: 
+                    # Nếu không có field status, hoặc status != "offline"
+                    # → Coi như host đang up, cập nhật metrics bình thường
                     was_offline = (host.status == 'offline')
                     host.set_status('up')
                     host.update_resource_metrics(h_data['cpu'], h_data['mem'], timestamp=batch_timestamp)

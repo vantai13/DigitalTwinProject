@@ -121,6 +121,46 @@ def run_simulation():
             
             # Host Metrics
             for h in net.hosts:
+
+                # Kiểm tra xem interface có UP không
+                intf_name = h.defaultIntf().name  # Thường là h1-eth0
+                try:
+                    if hasattr(h, 'lock'):
+                        with h.lock:
+                            # Chạy lệnh ip link show để kiểm tra status
+                            intf_status = h.cmd(f'ip link show {intf_name}')
+                    else:
+                        intf_status = h.cmd(f'ip link show {intf_name}')
+                    
+                    # Kiểm tra xem interface có UP không
+                    is_up = 'state UP' in intf_status
+                    
+                    if not is_up:
+                        # Interface DOWN → Không thu thập metrics, gửi status offline
+                        telemetry_batch["hosts"].append({
+                            "name": h.name,
+                            "cpu": 0.0,      # Force về 0
+                            "mem": 0.0,      # Force về 0
+                            "status": "offline"  # ← QUAN TRỌNG: Gửi status rõ ràng
+                        })
+                        logger.debug(f"[COLLECTOR] Host {h.name} interface DOWN, skip metrics")
+                        continue  # Bỏ qua host này, chuyển sang host tiếp theo
+                
+                except Exception as e:
+                    logger.warning(f"[COLLECTOR] Error checking {h.name} status: {e}")
+                    # Nếu lỗi → Coi như offline
+                    telemetry_batch["hosts"].append({
+                        "name": h.name,
+                        "cpu": 0.0,
+                        "mem": 0.0,
+                        "status": "offline"
+                    })
+                    continue
+
+                # ========================================
+                # CHỈ THU THẬP METRICS NẾU INTERFACE UP
+                # ========================================
+
                 telemetry_batch["hosts"].append({
                     "name": h.name,
                     "cpu": host_stats.get_host_cpu_usage(h),

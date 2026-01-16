@@ -203,7 +203,23 @@ class CommandExecutor:
                 interfaces = device.intfList()
                 
                 if action == 'disable':
-                    # Down tất cả interfaces
+                    logger.info(f"[EXECUTOR] Killing iPerf processes on {device_name}")
+                    try:
+                        if hasattr(device, 'lock'):
+                            with device.lock:
+                                # Kill tất cả iPerf processes
+                                device.cmd('killall iperf 2>/dev/null')
+                                # Sleep ngắn để đảm bảo process chết
+                                time.sleep(0.1)
+                        else:
+                            device.cmd('killall iperf 2>/dev/null')
+                            time.sleep(0.1)
+                    except Exception as e:
+                        logger.warning(f"[EXECUTOR] Error killing iperf on {device_name}: {e}")
+                    
+                    # ========================================
+                    # SAU ĐÓ MỚI DOWN INTERFACE
+                    # ========================================
                     for intf in interfaces:
                         if hasattr(device, 'lock'):
                             with device.lock:
