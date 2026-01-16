@@ -197,20 +197,19 @@ def get_host_memory_usage(host):
     return round(mem, 2)
 
 def get_interface_bytes(host, interface_name):
-    """
-    Lấy tổng số bytes TX và RX cho một interface (với timeout bảo vệ).
-    """
     try:
         cmd = f'timeout 0.2s cat /proc/net/dev | grep "{interface_name}:"'
 
-        # if hasattr(host, 'lock'):
-        #     with host.lock:
-        #         cmd_result = host.cmd(cmd)
-        # else:
-        #     cmd_result = host.cmd(cmd)
-        cmd_result = host.cmd(cmd)
+        # ========================================
+        # ✅ FIX: THÊM LOCK
+        # ========================================
+        cmd_result = ""
+        if hasattr(host, 'lock'):
+            with host.lock:
+                cmd_result = host.cmd(cmd)
+        else:
+            cmd_result = host.cmd(cmd)
 
-        # Timeout → trả về rỗng hoặc "Terminated"
         if not cmd_result or "Terminated" in cmd_result:
             return 0, 0
 
@@ -227,7 +226,7 @@ def get_interface_bytes(host, interface_name):
         return rx_bytes, tx_bytes
 
     except Exception as e:
-        logger.debug(f"[Interface bytes] Lỗi {host.name}-{interface_name}: {e}")
+        logger.debug(f"[HOST_STATS] Error: {e}")
         return 0, 0
 
 

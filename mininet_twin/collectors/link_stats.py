@@ -1,5 +1,7 @@
 import re
 
+
+
 # def collect_link_metrics(net, link_byte_counters, sync_interval):
 #     """
 #     Thu thập dữ liệu các link
@@ -126,24 +128,30 @@ def collect_link_metrics(net, link_byte_counters, prev_throughput_tracker, sync_
     return link_metrics
 
 def get_switch_interface_bytes(node, interface_name):
-    try:
-        # TƯ DUY MỚI: Thêm "timeout 0.2s" vào trước lệnh
-        # Nếu lệnh cat bị treo, Linux sẽ kill nó sau 0.2s, trả về rỗng
-        cmd = f'timeout 0.2s cat /proc/net/dev | grep "{interface_name}:"'
 
-        # [Quan trọng] Sử dụng lock nếu node là Host (để tránh xung đột với Traffic Gen)
-        cmd_result = ""
-        if hasattr(node, 'lock'): 
-             with node.lock:
-                 cmd_result = node.cmd(cmd)
-        else:
-             cmd_result = node.cmd(cmd)
+    cmd = f'timeout 0.2s cat /proc/net/dev | grep "{interface_name}:"'
 
-        if not cmd_result.strip(): return 0, 0
-        
-        line = cmd_result.strip()
-        stats = line.split(':')[1].strip()
-        parts = re.split(r'\s+', stats)
-        return int(parts[0]), int(parts[8])
-    except Exception:
+    # ========================================
+    # ✅ FIX: THÊM LOCK CHO MỌI NODE
+    # ========================================
+    cmd_result = ""
+    if hasattr(node, 'lock'):
+        with node.lock:
+            cmd_result = node.cmd(cmd)
+    else:
+        # Nếu là Switch (không có lock) → Vẫn OK
+        cmd_result = node.cmd(cmd)
+
+    if not cmd_result.strip():
         return 0, 0
+    
+    line = cmd_result.strip()
+    stats = line.split(':')[1].strip()
+    parts = re.split(r'\s+', stats)
+    
+    rx_bytes = int(parts[0])
+    tx_bytes = int(parts[8])
+    
+    return rx_bytes, tx_bytes
+    
+    

@@ -24,29 +24,45 @@ class TrafficGenerator:
             h.cmd('iperf -s -u &')
 
     def _traffic_loop(self):
-        """Vòng lặp chính để sinh traffic ngẫu nhiên."""
-        logger.info(" Bắt đầu vòng lặp sinh traffic ngẫu nhiên...")
+        logger.info("🔄 Bắt đầu vòng lặp sinh traffic ngẫu nhiên...")
         
         while self.running:
             try:
-                # Chọn ngẫu nhiên cặp Host (Src -> Dst)
-                src, dst = random.sample(self.net.hosts, 2)
-
-                # KIỂM TRA SRC 
-                if not hasattr(src, 'shell') or src.shell is None:
-                    logger.warning(f"Host {src.name} không có shell hợp lệ, bỏ qua...")
+                host_list = list(self.net.hosts)
+                if len(host_list) < 2:
                     time.sleep(1)
                     continue
+
+                # Chọn ngẫu nhiên cặp Host
+                src, dst = random.sample(host_list, 2)
+
+                # ========================================
+                # KIỂM TRA SRC INTERFACE (QUAN TRỌNG!)
+                # ========================================
+                src_intf_name = src.defaultIntf().name
+                
+                try:
+                    if hasattr(src, 'lock'):
+                        with src.lock:
+                            src_status = src.cmd(f'ip link show {src_intf_name}')
+                    else:
+                        src_status = src.cmd(f'ip link show {src_intf_name}')
                     
-                if getattr(src, 'waiting', False):
-                    logger.warning(f"Host {src.name} đang busy, bỏ qua...")
+                    src_is_up = 'state UP' in src_status
+                    
+                    if not src_is_up:
+                        logger.debug(f"[TRAFFIC] Source {src.name} offline, skip")
+                        time.sleep(0.5)
+                        continue
+                
+                except Exception as e:
+                    logger.debug(f"[TRAFFIC] Error checking {src.name}: {e}")
                     time.sleep(0.5)
                     continue
 
                 # ========================================
-                # [MỚI] KIỂM TRA DST - QUAN TRỌNG!
+                # KIỂM TRA DST INTERFACE (ĐÃ CÓ)
                 # ========================================
-                # Kiểm tra destination interface có UP không
                 dst_intf_name = dst.defaultIntf().name
                 
                 try:
@@ -59,54 +75,42 @@ class TrafficGenerator:
                     dst_is_up = 'state UP' in dst_status
                     
                     if not dst_is_up:
-                        logger.debug(f"[TRAFFIC] Destination {dst.name} interface DOWN, skip traffic")
+                        logger.debug(f"[TRAFFIC] Destination {dst.name} offline, skip")
                         time.sleep(0.5)
-                        continue  # ← Bỏ qua cặp này, chọn cặp khác
+                        continue
                 
                 except Exception as e:
-                    logger.warning(f"[TRAFFIC] Error checking {dst.name} status: {e}")
+                    logger.debug(f"[TRAFFIC] Error checking {dst.name}: {e}")
                     time.sleep(0.5)
                     continue
                 
                 # ========================================
-                # CHỈ GỬI TRAFFIC NẾU CẢ SRC VÀ DST ĐỀU UP
+                # CHỈ GỬI TRAFFIC NẾU CẢ 2 ĐỀU UP
                 # ========================================
-                
-                # Random băng thông và thời gian
-                bw_options = [5, 10, 20, 50, 80, 120] 
+                bw_options = [5, 10, 20, 50, 80, 120]
                 bandwidth = random.choice(bw_options)
                 duration = random.randint(2, 5)
                 
-                logger.info(f" [Traffic] {src.name} -> {dst.name} : {bandwidth}Mbps trong {duration}s")
-                
-                # Gửi lệnh tạo traffic (Client -> Server)
                 cmd = f'iperf -c {dst.IP()} -u -b {bandwidth}M -t {duration} &'
-
+                
                 try:
                     if hasattr(src, 'lock'):
                         with src.lock:
-                            # KIỂM TRA LẠI TRƯỚC KHI THỰC THI
                             if src.shell and not getattr(src, 'waiting', False):
-                                result = src.cmd(cmd)
-                            else:
-                                logger.warning(f"Host {src.name} không sẵn sàng, bỏ qua lệnh")
+                                src.cmd(cmd)
                     else:
-                        # KIỂM TRA TRƯỚC KHI THỰC THI
                         if src.shell and not getattr(src, 'waiting', False):
-                            result = src.cmd(cmd)
-                        else:
-                            logger.warning(f"Host {src.name} không sẵn sàng, bỏ qua lệnh")
-                            
-                except Exception as cmd_error:
-                    logger.error(f"Lỗi thực thi lệnh trên {src.name}: {cmd_error}")
-                    continue
+                            src.cmd(cmd)
                 
-                # Nghỉ ngẫu nhiên trước khi tạo luồng tiếp theo
+                except Exception as e:
+                    logger.error(f"[TRAFFIC] Error sending: {e}")
+                
                 time.sleep(random.uniform(0.5, 2.0))
-                
+            
             except Exception as e:
-                logger.error(f"Lỗi trong vòng lặp traffic: {e}", exc_info=True)
+                logger.error(f"[TRAFFIC] Loop error: {e}")
                 time.sleep(1)
+
 
     def start(self):
         """Bắt đầu quy trình sinh traffic."""

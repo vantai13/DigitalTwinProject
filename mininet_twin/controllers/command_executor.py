@@ -201,34 +201,71 @@ class CommandExecutor:
                 # ========================================
                 # Lấy tất cả interfaces của host (thường chỉ có 1)
                 interfaces = device.intfList()
-                
+
                 if action == 'disable':
-                    logger.info(f"[EXECUTOR] Killing iPerf processes on {device_name}")
+                    logger.info(f"[EXECUTOR] Disabling {device_name}...")
+                    
+                    # ========================================
+                    # BƯỚC 1: KILL IPERF PROCESSES
+                    # ========================================
                     try:
                         if hasattr(device, 'lock'):
                             with device.lock:
-                                # Kill tất cả iPerf processes
-                                device.cmd('killall iperf 2>/dev/null')
-                                # Sleep ngắn để đảm bảo process chết
-                                time.sleep(0.1)
+                                # Kill tất cả iPerf (client + server)
+                                device.cmd('killall -9 iperf 2>/dev/null')
+                                time.sleep(0.15)  # Đợi process chết hoàn toàn
+                                
+                                # Verify kill thành công
+                                verify = device.cmd('pgrep iperf')
+                                if verify.strip():
+                                    logger.warning(f"[EXECUTOR] iPerf vẫn chạy trên {device_name}")
                         else:
-                            device.cmd('killall iperf 2>/dev/null')
-                            time.sleep(0.1)
+                            device.cmd('killall -9 iperf 2>/dev/null')
+                            time.sleep(0.15)
+                    
                     except Exception as e:
-                        logger.warning(f"[EXECUTOR] Error killing iperf on {device_name}: {e}")
+                        logger.warning(f"[EXECUTOR] Error killing iperf: {e}")
                     
                     # ========================================
-                    # SAU ĐÓ MỚI DOWN INTERFACE
+                    # BƯỚC 2: DOWN ALL INTERFACES
                     # ========================================
+                    interfaces = device.intfList()
                     for intf in interfaces:
-                        if hasattr(device, 'lock'):
-                            with device.lock:
+                        try:
+                            if hasattr(device, 'lock'):
+                                with device.lock:
+                                    # Down interface
+                                    device.cmd(f'ifconfig {intf.name} down')
+                                    
+                                    # QUAN TRỌNG: Flush TX queue để tránh buffer drain
+                                    device.cmd(f'tc qdisc del dev {intf.name} root 2>/dev/null')
+                            else:
                                 device.cmd(f'ifconfig {intf.name} down')
-                        else:
-                            device.cmd(f'ifconfig {intf.name} down')
+                                device.cmd(f'tc qdisc del dev {intf.name} root 2>/dev/null')
+                        
+                        except Exception as e:
+                            logger.error(f"[EXECUTOR] Error disabling {intf.name}: {e}")
                     
-                    logger.info(f"[EXECUTOR] Host {device_name} disabled")
-                    message = f"Host {device_name} disabled successfully"
+                    # ========================================
+                    # BƯỚC 3: VERIFY INTERFACE DOWN
+                    # ========================================
+                    time.sleep(0.2)  # Đợi kernel apply
+                    
+                    verify_cmd = f'ip link show {interfaces[0].name}'
+                    if hasattr(device, 'lock'):
+                        with device.lock:
+                            status = device.cmd(verify_cmd)
+                    else:
+                        status = device.cmd(verify_cmd)
+                    
+                    is_down = 'state DOWN' in status
+                    
+                    if is_down:
+                        logger.info(f"[EXECUTOR] ✓ Host {device_name} disabled successfully")
+                        message = f"Host {device_name} disabled successfully"
+                    else:
+                        logger.warning(f"[EXECUTOR] ⚠️ Host {device_name} may not be fully down")
+                        message = f"Host {device_name} partially disabled"
                 
                 elif action == 'enable':
                     # Up tất cả interfaces
