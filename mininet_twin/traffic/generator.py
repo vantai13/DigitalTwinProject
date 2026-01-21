@@ -33,25 +33,26 @@ class TrafficGenerator:
                     time.sleep(1)
                     continue
 
-                # Chọn ngẫu nhiên cặp Host
                 src, dst = random.sample(host_list, 2)
 
-                # ========================================
-                # KIỂM TRA SRC INTERFACE (QUAN TRỌNG!)
-                # ========================================
+                # ✅ FIX: KIỂM TRA CẢ CARRIER STATUS
                 src_intf_name = src.defaultIntf().name
                 
                 try:
                     if hasattr(src, 'lock'):
                         with src.lock:
                             src_status = src.cmd(f'ip link show {src_intf_name}')
+                            # ✅ CHECK CARRIER
+                            src_carrier = src.cmd(f'cat /sys/class/net/{src_intf_name}/carrier 2>/dev/null')
                     else:
                         src_status = src.cmd(f'ip link show {src_intf_name}')
+                        src_carrier = src.cmd(f'cat /sys/class/net/{src_intf_name}/carrier 2>/dev/null')
                     
                     src_is_up = 'state UP' in src_status
+                    src_has_carrier = '1' in src_carrier.strip()
                     
-                    if not src_is_up:
-                        logger.debug(f"[TRAFFIC] Source {src.name} offline, skip")
+                    if not (src_is_up and src_has_carrier):
+                        logger.debug(f"[TRAFFIC] {src.name} no carrier (UP:{src_is_up}, Carrier:{src_has_carrier})")
                         time.sleep(0.5)
                         continue
                 
@@ -60,22 +61,23 @@ class TrafficGenerator:
                     time.sleep(0.5)
                     continue
 
-                # ========================================
-                # KIỂM TRA DST INTERFACE (ĐÃ CÓ)
-                # ========================================
+                # TƯƠNG TỰ CHO DST
                 dst_intf_name = dst.defaultIntf().name
                 
                 try:
                     if hasattr(dst, 'lock'):
                         with dst.lock:
                             dst_status = dst.cmd(f'ip link show {dst_intf_name}')
+                            dst_carrier = dst.cmd(f'cat /sys/class/net/{dst_intf_name}/carrier 2>/dev/null')
                     else:
                         dst_status = dst.cmd(f'ip link show {dst_intf_name}')
+                        dst_carrier = dst.cmd(f'cat /sys/class/net/{dst_intf_name}/carrier 2>/dev/null')
                     
                     dst_is_up = 'state UP' in dst_status
+                    dst_has_carrier = '1' in dst_carrier.strip()
                     
-                    if not dst_is_up:
-                        logger.debug(f"[TRAFFIC] Destination {dst.name} offline, skip")
+                    if not (dst_is_up and dst_has_carrier):
+                        logger.debug(f"[TRAFFIC] {dst.name} no carrier (UP:{dst_is_up}, Carrier:{dst_has_carrier})")
                         time.sleep(0.5)
                         continue
                 
@@ -84,9 +86,7 @@ class TrafficGenerator:
                     time.sleep(0.5)
                     continue
                 
-                # ========================================
-                # CHỈ GỬI TRAFFIC NẾU CẢ 2 ĐỀU UP
-                # ========================================
+                # CHỈ GỬI TRAFFIC NẾU CẢ 2 ĐỀU CÓ CARRIER
                 bw_options = [5, 10, 20, 50, 80, 120]
                 bandwidth = random.choice(bw_options)
                 duration = random.randint(2, 5)

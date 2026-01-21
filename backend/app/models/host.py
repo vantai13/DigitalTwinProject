@@ -16,7 +16,7 @@ class Host:
         self.last_update_time = None
         
 
-        self.status = 'unknown'  # Trạng thái ban đầu
+        self.status = 'up'  # Trạng thái ban đầu
         
         # Resource metrics
         self.cpu_utilization = 0.0  

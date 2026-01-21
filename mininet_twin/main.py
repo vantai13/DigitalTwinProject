@@ -49,6 +49,9 @@ def run_simulation():
     for h in net.hosts:
         h.lock = threading.Lock()
 
+    for s in net.switches:
+        s.lock = threading.Lock()
+
     # ========================================
     # ✅ FIX VẤN ĐỀ 3: KHỞI TẠO EXECUTOR TRƯỚC
     # ========================================
@@ -223,14 +226,48 @@ def run_simulation():
     except Exception as e:
         logger.error(f"Lỗi nghiêm trọng: {e}", exc_info=True)
     finally:
-        logger.info(" Dọn dẹp tài nguyên...")
+        logger.info("🧹 Dọn dẹp tài nguyên...")
         
-        network_stats.stop_background_measurement()
-        traffic_gen.stop()       # Dừng traffic
-        socket_client.disconnect() # Ngắt kết nối socket
-        net.stop()               # Dừng Mininet
+        # ✅ FIX: CLEANUP TỪNG BƯỚC
+        try:
+            if traffic_gen:
+                logger.info("  └─ Stopping traffic generator...")
+                traffic_gen.stop()
+        except Exception as e:
+            logger.error(f"  └─ Error stopping traffic: {e}")
         
-        logger.info(" Đã dừng Mininet sạch sẽ")
+        try:
+            logger.info("  └─ Stopping background measurement...")
+            network_stats.stop_background_measurement()
+        except Exception as e:
+            logger.error(f"  └─ Error stopping measurement: {e}")
+        
+        try:
+            if socket_client_instance:
+                logger.info("  └─ Disconnecting socket...")
+                socket_client_instance.disconnect()
+        except Exception as e:
+            logger.error(f"  └─ Error disconnecting socket: {e}")
+        
+        try:
+            if net:
+                logger.info("  └─ Stopping Mininet...")
+                # ✅ QUAN TRỌNG: Kill all iPerf trước
+                for h in net.hosts:
+                    try:
+                        h.cmd('killall -9 iperf 2>/dev/null')
+                    except:
+                        pass
+                
+                time.sleep(0.5)
+                net.stop()
+                logger.info("  └─ Mininet stopped successfully")
+        except Exception as e:
+            logger.error(f"  └─ Error stopping Mininet: {e}")
+            # Force cleanup
+            os.system('sudo mn -c 2>/dev/null')
+        
+        logger.info("✅ Cleanup hoàn tất")
 
 if __name__ == '__main__':
     run_simulation()

@@ -199,45 +199,34 @@ class CommandExecutor:
                 # ========================================
                 # TOGGLE HOST
                 # ========================================
-                # Lấy tất cả interfaces của host (thường chỉ có 1)
                 interfaces = device.intfList()
 
                 if action == 'disable':
                     logger.info(f"[EXECUTOR] Disabling {device_name}...")
                     
-                    # ========================================
                     # BƯỚC 1: KILL IPERF PROCESSES
-                    # ========================================
                     try:
                         if hasattr(device, 'lock'):
                             with device.lock:
-                                # Kill tất cả iPerf (client + server)
                                 device.cmd('killall -9 iperf 2>/dev/null')
-                                time.sleep(0.15)  # Đợi process chết hoàn toàn
+                                time.sleep(0.2)
                                 
-                                # Verify kill thành công
                                 verify = device.cmd('pgrep iperf')
                                 if verify.strip():
                                     logger.warning(f"[EXECUTOR] iPerf vẫn chạy trên {device_name}")
                         else:
                             device.cmd('killall -9 iperf 2>/dev/null')
-                            time.sleep(0.15)
+                            time.sleep(0.2)
                     
                     except Exception as e:
                         logger.warning(f"[EXECUTOR] Error killing iperf: {e}")
                     
-                    # ========================================
                     # BƯỚC 2: DOWN ALL INTERFACES
-                    # ========================================
-                    interfaces = device.intfList()
                     for intf in interfaces:
                         try:
                             if hasattr(device, 'lock'):
                                 with device.lock:
-                                    # Down interface
                                     device.cmd(f'ifconfig {intf.name} down')
-                                    
-                                    # QUAN TRỌNG: Flush TX queue để tránh buffer drain
                                     device.cmd(f'tc qdisc del dev {intf.name} root 2>/dev/null')
                             else:
                                 device.cmd(f'ifconfig {intf.name} down')
@@ -246,10 +235,8 @@ class CommandExecutor:
                         except Exception as e:
                             logger.error(f"[EXECUTOR] Error disabling {intf.name}: {e}")
                     
-                    # ========================================
                     # BƯỚC 3: VERIFY INTERFACE DOWN
-                    # ========================================
-                    time.sleep(0.2)  # Đợi kernel apply
+                    time.sleep(0.3)
                     
                     verify_cmd = f'ip link show {interfaces[0].name}'
                     if hasattr(device, 'lock'):
@@ -268,6 +255,8 @@ class CommandExecutor:
                         message = f"Host {device_name} partially disabled"
                 
                 elif action == 'enable':
+                    logger.info(f"[EXECUTOR] Enabling {device_name}...")
+                    
                     # Up tất cả interfaces
                     for intf in interfaces:
                         if hasattr(device, 'lock'):
@@ -287,19 +276,128 @@ class CommandExecutor:
             
             elif is_switch:
                 # ========================================
-                # TOGGLE SWITCH
+                # TOGGLE SWITCH - ✅ PHẦN NÀY QUAN TRỌNG NHẤT
                 # ========================================
                 if action == 'disable':
-                    # Stop switch
-                    device.stop()
-                    logger.info(f"[EXECUTOR] Switch {device_name} stopped")
-                    message = f"Switch {device_name} disabled successfully"
+                    logger.info(f"[EXECUTOR] Disabling switch {device_name}...")
+                    
+                    # ✅ PRE-CLEANUP - Dọn dẹp trước khi tắt
+                    try:
+                        # 1. Tìm tất cả hosts kết nối với switch này
+                        connected_hosts = []
+                        for link in self.net.links:
+                            if link.intf1.node == device or link.intf2.node == device:
+                                other_node = link.intf1.node if link.intf2.node == device else link.intf2.node
+                                if other_node.name.startswith('h'):
+                                    connected_hosts.append(other_node)
+                        
+                        logger.info(f"[EXECUTOR] Found {len(connected_hosts)} hosts connected to {device_name}")
+                        
+                        # 2. Kill iPerf trên các hosts này
+                        for h in connected_hosts:
+                            try:
+                                if hasattr(h, 'lock'):
+                                    with h.lock:
+                                        h.cmd('killall -9 iperf 2>/dev/null')
+                                        time.sleep(0.1)
+                                else:
+                                    h.cmd('killall -9 iperf 2>/dev/null')
+                                    time.sleep(0.1)
+                                
+                                logger.debug(f"[EXECUTOR] Killed iPerf on {h.name}")
+                            except Exception as e:
+                                logger.warning(f"[EXECUTOR] Error killing iPerf on {h.name}: {e}")
+                        
+                        # 3. Flush TC qdisc trên các interfaces
+                        for h in connected_hosts:
+                            try:
+                                intf = h.defaultIntf()
+                                if hasattr(h, 'lock'):
+                                    with h.lock:
+                                        h.cmd(f'tc qdisc del dev {intf.name} root 2>/dev/null')
+                                else:
+                                    h.cmd(f'tc qdisc del dev {intf.name} root 2>/dev/null')
+                                
+                                logger.debug(f"[EXECUTOR] Flushed TC on {h.name}-{intf.name}")
+                            except Exception as e:
+                                logger.warning(f"[EXECUTOR] Error flushing TC: {e}")
+                        
+                        # 4. Đợi cleanup hoàn tất
+                        time.sleep(0.5)
+                    
+                    except Exception as e:
+                        logger.error(f"[EXECUTOR] Pre-cleanup error: {e}")
+                    
+                    # ✅ Tắt switch với error handling
+                    try:
+                        device.stop()
+                        logger.info(f"[EXECUTOR] Switch {device_name} stopped successfully")
+                        message = f"Switch {device_name} disabled successfully"
+                    except Exception as e:
+                        logger.error(f"[EXECUTOR] Error stopping switch: {e}")
+                        return {
+                            'success': False,
+                            'error': f"Failed to stop switch: {str(e)}"
+                        }
                 
                 elif action == 'enable':
-                    # Start switch
-                    device.start([])  # Empty controller list (sử dụng default)
-                    logger.info(f"[EXECUTOR] Switch {device_name} started")
-                    message = f"Switch {device_name} enabled successfully"
+                    logger.info(f"[EXECUTOR] Enabling switch {device_name}...")
+                    
+                    # ✅ Bật switch với recovery procedure
+                    try:
+                        # 1. Start switch
+                        device.start([])
+                        time.sleep(0.5)
+                        
+                        # 2. Tìm hosts kết nối
+                        connected_hosts = []
+                        for link in self.net.links:
+                            if link.intf1.node == device or link.intf2.node == device:
+                                other_node = link.intf1.node if link.intf2.node == device else link.intf2.node
+                                if other_node.name.startswith('h'):
+                                    connected_hosts.append(other_node)
+                        
+                        # 3. Recovery procedure cho mỗi host
+                        for h in connected_hosts:
+                            try:
+                                intf = h.defaultIntf()
+                                if hasattr(h, 'lock'):
+                                    with h.lock:
+                                        h.cmd('ip neigh flush all')
+                                        h.cmd('ip route flush cache')
+                                        h.cmd(f'ip link set {intf.name} down')
+                                        time.sleep(0.1)
+                                        h.cmd(f'ip link set {intf.name} up')
+                                        
+                                        verify = h.cmd(f'cat /sys/class/net/{intf.name}/carrier 2>/dev/null')
+                                        has_carrier = '1' in verify
+                                        logger.debug(f"[EXECUTOR] {h.name} carrier: {has_carrier}")
+                                else:
+                                    h.cmd('ip neigh flush all')
+                                    h.cmd('ip route flush cache')
+                                    h.cmd(f'ip link set {intf.name} down')
+                                    time.sleep(0.1)
+                                    h.cmd(f'ip link set {intf.name} up')
+                            
+                            except Exception as e:
+                                logger.warning(f"[EXECUTOR] Recovery error for {h.name}: {e}")
+                        
+                        # 4. Verify switch operational
+                        time.sleep(1.0)
+                        flows = device.cmd('ovs-ofctl dump-flows')
+                        if 'table=' in flows:
+                            logger.info(f"[EXECUTOR] Switch {device_name} operational")
+                            message = f"Switch {device_name} enabled successfully"
+                        else:
+                            logger.warning(f"[EXECUTOR] Switch {device_name} may not be fully operational")
+                            message = f"Switch {device_name} enabled (verification inconclusive)"
+                    
+                    except Exception as e:
+                        logger.error(f"[EXECUTOR] Error enabling switch: {e}")
+                        return {
+                            'success': False,
+                            'error': f"Failed to enable switch: {str(e)}"
+                        }
                 
                 else:
                     return {
@@ -313,12 +411,10 @@ class CommandExecutor:
                     'error': f"Unknown device type for '{device_name}'"
                 }
             
-            # Verify kết quả bằng cách ping (cho host)
+            # Verify kết quả
             verification = None
             if is_host and action == 'enable':
-                # Thử ping để verify host đã up
-                time.sleep(0.2)  # Wait cho interface lên
-                # Tìm host khác để ping
+                time.sleep(0.3)
                 other_hosts = [h for h in self.net.hosts if h.name != device_name]
                 if other_hosts:
                     target = other_hosts[0]

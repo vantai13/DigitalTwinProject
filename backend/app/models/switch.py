@@ -10,7 +10,7 @@ class Switch:
         self.name = name
         self.dpid = dpid
 
-        self.status = 'unknown' 
+        self.status = 'up' 
 
         self.last_update_time = None
         
