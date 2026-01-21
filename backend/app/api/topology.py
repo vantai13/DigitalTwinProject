@@ -54,8 +54,28 @@ def init_topology():
         # GỬI INITIAL STATE CHO TẤT CẢ CLIENT QUA SOCKET
         try:
             snapshot = digital_twin.get_network_snapshot()
+            
+            # ✅ FIX: FORCE TẤT CẢ NODES VỀ STATUS 'UP' KHI KHỞI ĐỘNG
+            for node in snapshot['graph_data']['nodes']:
+                if 'details' in node and 'status' in node['details']:
+                    # Force status về 'up' nếu không phải 'offline'
+                    if node['details']['status'] != 'offline':
+                        node['details']['status'] = 'up'
+                    
+                    # Force group đúng
+                    if node['group'] and node['group'].startswith('host'):
+                        if node['details']['status'] == 'offline':
+                            node['group'] = 'host-offline'
+                        else:
+                            node['group'] = 'host'
+                    elif node['group'] and node['group'].startswith('switch'):
+                        if node['details']['status'] == 'offline':
+                            node['group'] = 'switch-offline'
+                        else:
+                            node['group'] = 'switch'
+            
             socketio.emit('initial_state', snapshot)
-            logger.info(">>> Đã broadcast initial_state qua WebSocket")
+            logger.info(">>> Đã broadcast initial_state (forced UP status) qua WebSocket")
         except Exception as emit_error:
             logger.warning(f"[CẢNH BÁO] Không thể emit WebSocket: {emit_error}")
         

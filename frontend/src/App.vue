@@ -237,25 +237,55 @@ socket.on('initial_state', (data) => {
   // =============================================
   socket.on('host_updated', (hostData) => {
     if (!networkData.value) return
+    
     const node = networkData.value.graph_data.nodes.find(n => n.id === hostData.name)
     if (node) {
+      // ✅ FIX: CẬP NHẬT ĐẦY ĐỦ DETAILS
       Object.assign(node.details, hostData)
+      
+      // ✅ FIX: XÁC ĐỊNH GROUP DỰA TRÊN STATUS
       if (hostData.status === 'offline') {
         node.group = 'host-offline'
-      } else if (node.group === 'host-offline') {
+      } else if (hostData.status === 'high-load') {
+        node.group = 'host-high-load'
+      } else {
+        // ✅ QUAN TRỌNG: Force về 'host' khi up
         node.group = 'host'
       }
+      
       lastUpdateTime.value = new Date().toISOString()
+      
+      // ✅ FORCE RE-RENDER: Trigger reactivity
+      networkData.value = { ...networkData.value }
+      
+      console.log(`✅ Host ${hostData.name} updated: group=${node.group}, status=${hostData.status}`)
     }
   })
 
   socket.on('switch_updated', (switchData) => {
     if (!networkData.value) return
+    
     const node = networkData.value.graph_data.nodes.find(n => n.id === switchData.name)
     if (node) {
+      // ✅ FIX: CẬP NHẬT ĐẦY ĐỦ
       Object.assign(node.details, switchData)
-      node.group = switchData.status === 'offline' ? 'switch-offline' : 'switch'
+      
+      // ✅ FIX: XÁC ĐỊNH GROUP
+      if (switchData.status === 'offline') {
+        node.group = 'switch-offline'
+      } else if (switchData.status === 'high-load') {
+        node.group = 'switch-high-load'
+      } else {
+        // ✅ Force về 'switch' khi up
+        node.group = 'switch'
+      }
+      
       lastUpdateTime.value = new Date().toISOString()
+      
+      // ✅ FORCE RE-RENDER
+      networkData.value = { ...networkData.value }
+      
+      console.log(`✅ Switch ${switchData.name} updated: group=${node.group}, status=${switchData.status}`)
     }
   })
 
