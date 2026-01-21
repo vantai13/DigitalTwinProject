@@ -265,7 +265,54 @@ class CommandExecutor:
                         else:
                             device.cmd(f'ifconfig {intf.name} up')
                     
-                    logger.info(f"[EXECUTOR] Host {device_name} enabled")
+                    # ========================================
+                    # ✅ FIX: THÊM RECOVERY PROCEDURE
+                    # ========================================
+                    logger.info(f"[EXECUTOR] Starting recovery procedure for {device_name}...")
+                    
+                    # BƯỚC 1: Đợi interface lên
+                    time.sleep(0.3)
+                    
+                    # BƯỚC 2: Flush caches
+                    for intf in interfaces:
+                        try:
+                            if hasattr(device, 'lock'):
+                                with device.lock:
+                                    # Flush ARP cache
+                                    device.cmd('ip neigh flush all')
+                                    # Flush routing cache
+                                    device.cmd('ip route flush cache')
+                                    # Reset interface
+                                    device.cmd(f'ip link set {intf.name} down')
+                                    time.sleep(0.1)
+                                    device.cmd(f'ip link set {intf.name} up')
+                            else:
+                                device.cmd('ip neigh flush all')
+                                device.cmd('ip route flush cache')
+                                device.cmd(f'ip link set {intf.name} down')
+                                time.sleep(0.1)
+                                device.cmd(f'ip link set {intf.name} up')
+                        except Exception as e:
+                            logger.warning(f"[EXECUTOR] Recovery warning for {intf.name}: {e}")
+                    
+                    # BƯỚC 3: Đợi carrier stable
+                    time.sleep(0.5)
+                    
+                    # BƯỚC 4: Verify carrier
+                    for intf in interfaces:
+                        try:
+                            if hasattr(device, 'lock'):
+                                with device.lock:
+                                    carrier = device.cmd(f'cat /sys/class/net/{intf.name}/carrier 2>/dev/null')
+                            else:
+                                carrier = device.cmd(f'cat /sys/class/net/{intf.name}/carrier 2>/dev/null')
+                            
+                            has_carrier = '1' in carrier.strip()
+                            logger.debug(f"[EXECUTOR] {device_name}-{intf.name} carrier: {has_carrier}")
+                        except:
+                            pass
+                    
+                    logger.info(f"[EXECUTOR] Host {device_name} enabled and recovered")
                     message = f"Host {device_name} enabled successfully"
                 
                 else:
@@ -298,10 +345,16 @@ class CommandExecutor:
                             try:
                                 if hasattr(h, 'lock'):
                                     with h.lock:
-                                        h.cmd('killall -9 iperf 2>/dev/null')
+                                        # ✅ FIX: Thêm timeout để tránh hang
+                                        h.cmd('timeout 1s killall -9 iperf 2>/dev/null || true')
                                         time.sleep(0.1)
+                                        # Verify kill
+                                        remaining = h.cmd('pgrep iperf 2>/dev/null')
+                                        if remaining.strip():
+                                            logger.warning(f"[EXECUTOR] iPerf still running on {h.name}, force kill")
+                                            h.cmd('pkill -9 -f iperf 2>/dev/null || true')
                                 else:
-                                    h.cmd('killall -9 iperf 2>/dev/null')
+                                    h.cmd('timeout 1s killall -9 iperf 2>/dev/null || true')
                                     time.sleep(0.1)
                                 
                                 logger.debug(f"[EXECUTOR] Killed iPerf on {h.name}")
@@ -391,6 +444,13 @@ class CommandExecutor:
                         else:
                             logger.warning(f"[EXECUTOR] Switch {device_name} may not be fully operational")
                             message = f"Switch {device_name} enabled (verification inconclusive)"
+
+                        # ========================================
+                        # ✅ FIX: THÊM DÒNG NÀY VÀO CUỐI
+                        # ========================================
+                        # Đợi thêm 1s để đảm bảo hoàn toàn stable
+                        time.sleep(1.0)
+                        logger.info(f"[EXECUTOR] Switch {device_name} recovery completed")
                     
                     except Exception as e:
                         logger.error(f"[EXECUTOR] Error enabling switch: {e}")

@@ -197,50 +197,68 @@ def get_host_memory_usage(host):
     return round(mem, 2)
 
 def get_interface_bytes(host, interface_name):
-    try:
-        cmd = f'timeout 0.2s cat /proc/net/dev | grep "{interface_name}:"'
-
-        # ========================================
-        # ✅ FIX: THÊM LOCK
-        # ========================================
-        cmd_result = ""
-        if hasattr(host, 'lock'):
-            with host.lock:
+    """
+    Đọc RX/TX bytes từ host interface với error handling
+    
+    ✅ FIX: Tương tự như get_switch_interface_bytes
+    """
+    max_retries = 2
+    timeout = 0.3
+    
+    for attempt in range(max_retries):
+        cmd = f'timeout {timeout}s cat /proc/net/dev | grep "{interface_name}:"'
+        
+        try:
+            cmd_result = ""
+            if hasattr(host, 'lock'):
+                with host.lock:
+                    cmd_result = host.cmd(cmd)
+            else:
                 cmd_result = host.cmd(cmd)
-        else:
-            cmd_result = host.cmd(cmd)
-
-        if not cmd_result or "Terminated" in cmd_result:
+            
+            # Kiểm tra output hợp lệ
+            if not cmd_result or not cmd_result.strip():
+                if attempt < max_retries - 1:
+                    continue
+                return 0, 0
+            
+            # Kiểm tra error messages
+            error_keywords = ['Connection', 'Terminated', 'closed', 'timeout']
+            if any(keyword in cmd_result for keyword in error_keywords):
+                if attempt < max_retries - 1:
+                    time.sleep(0.1)
+                    continue
+                return 0, 0
+            
+            # Parse
+            line = cmd_result.strip()
+            if ':' not in line:
+                if attempt < max_retries - 1:
+                    continue
+                return 0, 0
+            
+            stats = line.split(':', 1)[1].strip()
+            parts = re.split(r'\s+', stats)
+            
+            if len(parts) < 9:
+                if attempt < max_retries - 1:
+                    continue
+                return 0, 0
+            
+            try:
+                rx_bytes = int(parts[0])
+                tx_bytes = int(parts[8])
+                return rx_bytes, tx_bytes
+            except (ValueError, IndexError):
+                if attempt < max_retries - 1:
+                    continue
+                return 0, 0
+        
+        except Exception as e:
+            logger.debug(f"[HOST_STATS] Error reading {interface_name} (attempt {attempt+1}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(0.1)
+                continue
             return 0, 0
-
-        line = cmd_result.strip()
-        if not line:
-            return 0, 0
-
-        stats = line.split(':', 1)[1].strip()
-        parts = re.split(r'\s+', stats)
-
-        rx_bytes = int(parts[0])
-        tx_bytes = int(parts[8])
-
-        return rx_bytes, tx_bytes
-
-    except Exception as e:
-        logger.debug(f"[HOST_STATS] Error: {e}")
-        return 0, 0
-
-
-def list_all_interfaces(host):
-    """Debug: Liệt kê tất cả interface của host (cũng thêm timeout)."""
-    try:
-        cmd = "timeout 0.5s cat /proc/net/dev"  # Cho debug thì timeout dài hơn chút
-        # if hasattr(host, 'lock'):
-        #     with host.lock:
-        #         cmd_result = host.cmd(cmd)
-        # else:
-        #     cmd_result = host.cmd(cmd)
-        cmd_result = host.cmd(cmd)
-        logger.info(f"\n[DEBUG] Interfaces của {host.name}:\n{cmd_result}")
-
-    except Exception as e:
-        logger.error(f"[Lỗi] list_all_interfaces {host.name}: {e}")
+    
+    return 0, 0

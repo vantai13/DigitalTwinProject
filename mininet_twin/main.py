@@ -243,9 +243,9 @@ def run_simulation():
             logger.error(f"  └─ Error stopping measurement: {e}")
         
         try:
-            if socket_client_instance:
+            if socket_client:
                 logger.info("  └─ Disconnecting socket...")
-                socket_client_instance.disconnect()
+                socket_client.disconnect()
         except Exception as e:
             logger.error(f"  └─ Error disconnecting socket: {e}")
         

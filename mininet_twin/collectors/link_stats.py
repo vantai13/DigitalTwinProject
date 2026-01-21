@@ -1,4 +1,6 @@
 import re
+import time 
+from venv import logger
 
 
 
@@ -128,30 +130,83 @@ def collect_link_metrics(net, link_byte_counters, prev_throughput_tracker, sync_
     return link_metrics
 
 def get_switch_interface_bytes(node, interface_name):
-
-    cmd = f'timeout 0.2s cat /proc/net/dev | grep "{interface_name}:"'
-
-    # ========================================
-    # ✅ FIX: THÊM LOCK CHO MỌI NODE
-    # ========================================
-    cmd_result = ""
-    if hasattr(node, 'lock'):
-        with node.lock:
-            cmd_result = node.cmd(cmd)
-    else:
-        # Nếu là Switch (không có lock) → Vẫn OK
-        cmd_result = node.cmd(cmd)
-
-    if not cmd_result.strip():
-        return 0, 0
+    """
+    Đọc RX/TX bytes từ /proc/net/dev với error handling
     
-    line = cmd_result.strip()
-    stats = line.split(':')[1].strip()
-    parts = re.split(r'\s+', stats)
+    ✅ FIX:
+    - Kiểm tra output có hợp lệ không
+    - Retry nếu timeout
+    - Fallback về 0,0 nếu lỗi
+    """
+    max_retries = 2
+    timeout = 0.3  # Tăng từ 0.2s lên 0.3s
     
-    rx_bytes = int(parts[0])
-    tx_bytes = int(parts[8])
+    for attempt in range(max_retries):
+        cmd = f'timeout {timeout}s cat /proc/net/dev | grep "{interface_name}:"'
+        
+        try:
+            # Execute command với lock
+            cmd_result = ""
+            if hasattr(node, 'lock'):
+                with node.lock:
+                    cmd_result = node.cmd(cmd)
+            else:
+                cmd_result = node.cmd(cmd)
+            
+            # ========================================
+            # ✅ FIX 1: KIỂM TRA OUTPUT HỢP LỆ
+            # ========================================
+            if not cmd_result or not cmd_result.strip():
+                if attempt < max_retries - 1:
+                    continue  # Retry
+                return 0, 0
+            
+            # ========================================
+            # ✅ FIX 2: KIỂM TRA TIMEOUT/ERROR MESSAGES
+            # ========================================
+            error_keywords = ['Connection', 'Terminated', 'closed', 'timeout']
+            if any(keyword in cmd_result for keyword in error_keywords):
+                if attempt < max_retries - 1:
+                    time.sleep(0.1)  # Đợi 100ms trước khi retry
+                    continue
+                return 0, 0
+            
+            # ========================================
+            # ✅ FIX 3: PARSE VỚI ERROR HANDLING
+            # ========================================
+            line = cmd_result.strip()
+            
+            # Kiểm tra format đúng (phải có dấu ':')
+            if ':' not in line:
+                if attempt < max_retries - 1:
+                    continue
+                return 0, 0
+            
+            stats = line.split(':', 1)[1].strip()
+            parts = re.split(r'\s+', stats)
+            
+            # Kiểm tra đủ số field (phải có ít nhất 9 fields)
+            if len(parts) < 9:
+                if attempt < max_retries - 1:
+                    continue
+                return 0, 0
+            
+            # Parse với try-except
+            try:
+                rx_bytes = int(parts[0])
+                tx_bytes = int(parts[8])
+                return rx_bytes, tx_bytes
+            except (ValueError, IndexError):
+                if attempt < max_retries - 1:
+                    continue
+                return 0, 0
+        
+        except Exception as e:
+            logger.debug(f"[LINK_STATS] Error reading {interface_name} (attempt {attempt+1}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(0.1)
+                continue
+            return 0, 0
     
-    return rx_bytes, tx_bytes
-    
-    
+    # Nếu hết retries
+    return 0, 0
