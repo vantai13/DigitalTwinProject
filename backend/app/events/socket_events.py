@@ -239,7 +239,21 @@ def register_socket_events(socketio):
                     }
                     for l_data in data.get('links', [])
                 ],
-                'switches': data.get('switches', []),  # Giữ nguyên
+                # ========================================
+                # ✅ FIX: BUILD SWITCHES VỚI STATUS THẬT
+                # ========================================
+                'switches': [
+                    {
+                        'name': s_data if isinstance(s_data, str) else s_data.get('name'),
+                        'status': digital_twin.get_switch(
+                            s_data if isinstance(s_data, str) else s_data.get('name')
+                        ).status if digital_twin.get_switch(
+                            s_data if isinstance(s_data, str) else s_data.get('name')
+                        ) else 'unknown',
+                        'ports': s_data.get('ports', {}) if isinstance(s_data, dict) else {}
+                    }
+                    for s_data in data.get('switches', [])
+                ],
                 'latency': data.get('latency', [])     # Giữ nguyên
             }
         

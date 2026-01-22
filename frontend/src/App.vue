@@ -211,13 +211,14 @@ socket.on('initial_state', (data) => {
     }
     // 3. Cập nhật Switches (Heartbeat)
     // ========================================
-    // ✅ FIX 3: KHÔNG TỰ ĐỘNG SET SWITCH = UP
+    // ✅ FIX 3: CẬP NHẬT SWITCHES VỚI STATUS THẬT
     // ========================================
-    // 3. Cập nhật Switches: CHỈ update port stats, KHÔNG đụng status
     if (batchData.switches && Array.isArray(batchData.switches)) {
       batchData.switches.forEach(sData => {
         // Parse sData (có thể là string hoặc object)
         const sName = typeof sData === 'string' ? sData : sData.name
+        const sStatus = typeof sData === 'object' ? sData.status : null
+        const sPorts = typeof sData === 'object' ? sData.ports : null
         
         const nodeIndex = networkData.value.graph_data.nodes.findIndex(
           n => n.id === sName
@@ -226,15 +227,31 @@ socket.on('initial_state', (data) => {
         if (nodeIndex !== -1) {
           const node = networkData.value.graph_data.nodes[nodeIndex]
           
-          // ✅ CHỈ CẬP NHẬT PORT STATS, KHÔNG ĐỘNG VÀO STATUS
-          if (typeof sData === 'object' && sData.ports) {
+          // ✅ CẬP NHẬT PORT STATS (nếu có)
+          if (sPorts) {
             if (!node.details) node.details = {}
-            node.details.ports = sData.ports
-            node.details.port_stats = sData.ports
+            node.details.ports = sPorts
+            node.details.port_stats = sPorts
           }
           
-          // ✅ QUAN TRỌNG: KHÔNG SET STATUS, KHÔNG ĐỔI GROUP
-          // Để Reaper hoặc switch_updated event xử lý status
+          // ========================================
+          // ✅ QUAN TRỌNG: CẬP NHẬT STATUS VÀ GROUP
+          // ========================================
+          if (sStatus) {
+            // Backend gửi status → Update node
+            node.details = node.details || {}
+            node.details.status = sStatus
+            
+            // Xác định group dựa trên status
+            if (sStatus === 'offline') {
+              node.group = 'switch-offline'
+            } else if (sStatus === 'high-load') {
+              node.group = 'switch-high-load'
+            } else {
+              node.group = 'switch'
+            }
+          }
+          // ✅ KHÔNG CÒN AUTO-UP NỮA
         }
       })
     }
