@@ -178,10 +178,15 @@ def run_simulation():
             for sw in net.switches:
                 s_name = sw.name
                 s_stats = switch_data_collected.get(s_name, {})
+
+                # ✅ KIỂM TRA SWITCH CÓ ĐANG CHẠY KHÔNG
+                # Switch đang chạy nếu: sw.shell tồn tại và không bị stop()
+                is_running = hasattr(sw, 'shell') and sw.shell is not None
                 
                 telemetry_batch["switches"].append({
                     "name": s_name,
-                    "ports": s_stats 
+                    "ports": s_stats,
+                    "status": "up" if is_running else "offline"
                 })
 
             

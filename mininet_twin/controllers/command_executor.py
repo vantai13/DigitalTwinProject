@@ -261,6 +261,7 @@ class CommandExecutor:
                     # ========================================
                     # ✅ FIX 1: GỬI STATUS UPDATE NGAY LẬP TỨC
                     # ========================================
+                    # time.sleep(0.3)  # ← THÊM DELAY ĐỂ INTERFACE HOÀN TOÀN UP
                     self._send_device_status_update(device_name, 'up', is_host=True)
                 
                 else:
@@ -630,15 +631,15 @@ class CommandExecutor:
             is_host (bool): True nếu là host, False nếu là switch
         """
         try:
-            # Import socket_client (nếu chưa có)
+            # ✅ FIX: Import động để tránh circular import
             from services.socket_client import socket_client_instance
             
             if not socket_client_instance:
-                logger.warning(f"[EXECUTOR] SocketClient not available, skip status update")
+                logger.warning(f"[EXECUTOR] SocketClient not initialized yet")
                 return
             
             if not socket_client_instance.is_connected():
-                logger.warning(f"[EXECUTOR] Socket not connected, skip status update")
+                logger.warning(f"[EXECUTOR] Socket not connected")
                 return
             
             # Tạo update data
@@ -653,14 +654,17 @@ class CommandExecutor:
             else:
                 update_data = {
                     'name': device_name,
-                    'status': status
+                    'status': status,
+                    'dpid': None  # ← Switch cần thêm field này
                 }
                 event_name = 'switch_updated'
             
-            # Gửi qua socket
+            # ✅ GỬI QUA SOCKET
             socket_client_instance.sio.emit(event_name, update_data)
-            logger.info(f"[EXECUTOR] ✓ Sent {event_name}: {device_name} -> {status}")
+            logger.info(f"[EXECUTOR] ✅ Sent {event_name}: {device_name} → {status}")
         
+        except ImportError as e:
+            logger.error(f"[EXECUTOR] Import error: {e}")
         except Exception as e:
             logger.error(f"[EXECUTOR] Error sending status update: {e}")
 

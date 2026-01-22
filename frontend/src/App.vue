@@ -210,23 +210,37 @@ socket.on('initial_state', (data) => {
       })
     }
     // 3. Cập nhật Switches (Heartbeat)
+    // ========================================
+    // ✅ FIX 3: KHÔNG TỰ ĐỘNG SET SWITCH = UP
+    // ========================================
+    // 3. Cập nhật Switches: CHỈ update port stats, KHÔNG đụng status
     if (batchData.switches && Array.isArray(batchData.switches)) {
-      batchData.switches.forEach(sName => {
+      batchData.switches.forEach(sData => {
+        // Parse sData (có thể là string hoặc object)
+        const sName = typeof sData === 'string' ? sData : sData.name
+        
         const nodeIndex = networkData.value.graph_data.nodes.findIndex(
           n => n.id === sName
         )
         
         if (nodeIndex !== -1) {
           const node = networkData.value.graph_data.nodes[nodeIndex]
-          if (node.details) {
-            // Heartbeat nhận được -> chắc chắn là UP
-            node.details.status = 'up'
+          
+          // ✅ CHỈ CẬP NHẬT PORT STATS, KHÔNG ĐỘNG VÀO STATUS
+          if (typeof sData === 'object' && sData.ports) {
+            if (!node.details) node.details = {}
+            node.details.ports = sData.ports
+            node.details.port_stats = sData.ports
           }
-          // Reset group về switch thường (nếu trước đó bị offline)
-          node.group = 'switch'
+          
+          // ✅ QUAN TRỌNG: KHÔNG SET STATUS, KHÔNG ĐỔI GROUP
+          // Để Reaper hoặc switch_updated event xử lý status
         }
       })
     }
+
+    // ✅ BONUS: Log để debug
+    console.log('[BATCH] Switches updated (ports only, status unchanged)')
 
     lastUpdateTime.value = new Date().toISOString()
   })

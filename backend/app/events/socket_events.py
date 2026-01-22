@@ -95,27 +95,35 @@ def register_socket_events(socketio):
             batch_timestamp = data.get('timestamp')
             
             # --- B. Cập nhật Digital Twin (từ raw data) ---
+            # ========================================
+            # ✅ FIX: XỬ LÝ HOST ĐÚNG LOGIC
+            # ========================================
             for h_data in data.get('hosts', []):
                 host = digital_twin.get_host(h_data['name'])
                 if host:
+                    # CASE 1: Mininet gửi rõ ràng status=offline
                     if 'status' in h_data and h_data['status'] == 'offline':
                         was_up = (host.status == 'up')
                         host.set_status('offline')
-            
+                        
                         # Broadcast ngay lập tức nếu status thay đổi
                         if was_up:
                             socketio.emit('host_updated', host.to_json())
                             logger.info(f"🔴 Host {host.name} → OFFLINE (immediate broadcast)")
-
-                else: 
-                    # Nếu không có field status, hoặc status != "offline"
-                    # → Coi như host đang up, cập nhật metrics bình thường
-                    was_offline = (host.status == 'offline')
-                    host.set_status('up')
-                    host.update_resource_metrics(h_data['cpu'], h_data['mem'], timestamp=batch_timestamp)
                     
-                    if was_offline:
-                        socketio.emit('host_updated', host.to_json())
+                    # CASE 2: Mininet KHÔNG gửi status=offline → Host đang UP
+                    # ← ĐÂY LÀ NHÁNH QUAN TRỌNG NHẤT
+                    else:
+                        was_offline = (host.status == 'offline')
+                        
+                        # ✅ FIX: Set UP và cập nhật metrics
+                        host.set_status('up')
+                        host.update_resource_metrics(h_data['cpu'], h_data['mem'], timestamp=batch_timestamp)
+                        
+                        # ✅ FIX: Nếu host vừa hồi sinh từ offline → Broadcast ngay
+                        if was_offline:
+                            socketio.emit('host_updated', host.to_json())
+                            logger.info(f"🟢 Host {host.name} → UP (recovered from offline)")
             
             for l_data in data.get('links', []):
                 parts = l_data['id'].split('-')
@@ -136,20 +144,59 @@ def register_socket_events(socketio):
                             # Status thay đổi → Broadcast ngay lập tức
                             logger.info(f"🔄 Link {link.id} status: {previous_status} → {link.status}")
                             socketio.emit('link_updated', link.to_json())
-            
+
+            # ========================================
+            # ✅ FIX: XỬ LÝ SWITCH VỚI STATUS CHECKING V2
+            # ========================================
             for s_data in data.get('switches', []):
+                # Parse s_data (có thể là string hoặc dict)
                 if isinstance(s_data, str):
                     s_name = s_data
                     s_ports = {}
+                    s_status = None  # ← Không có status (dữ liệu cũ)
                 else:
                     s_name = s_data.get('name')
                     s_ports = s_data.get('ports', {})
+                    s_status = s_data.get('status')  # ← Lấy status từ Mininet
                 
                 switch = digital_twin.get_switch(s_name)
                 if switch:
-                    switch.heartbeat(timestamp=batch_timestamp)
-                    if s_ports:
-                        switch.update_port_stats(s_ports, timestamp=batch_timestamp)
+                    previous_status = switch.status  # ← Lưu trạng thái cũ
+                    
+                    # ========================================
+                    # ✅ FIX: LOGIC XỬ LÝ STATUS
+                    # ========================================
+                    if s_status == 'offline':
+                        # CASE 1: Mininet gửi rõ ràng offline
+                        switch.set_status('offline')
+                        
+                        # Broadcast nếu status thay đổi
+                        if previous_status != 'offline':
+                            socketio.emit('switch_updated', switch.to_json())
+                            logger.info(f"🔴 Switch {s_name} → OFFLINE (from Mininet)")
+                    
+                    elif s_status == 'up':
+                        # CASE 2: Mininet gửi rõ ràng up
+                        was_offline = (previous_status == 'offline')
+                        
+                        switch.set_status('up')
+                        switch.heartbeat(timestamp=batch_timestamp)
+                        if s_ports:
+                            switch.update_port_stats(s_ports, timestamp=batch_timestamp)
+                        
+                        # Broadcast nếu vừa hồi sinh
+                        if was_offline:
+                            socketio.emit('switch_updated', switch.to_json())
+                            logger.info(f"🟢 Switch {s_name} → UP (recovered from offline)")
+                    
+                    else:
+                        # CASE 3: Không có status (dữ liệu cũ) → Chỉ heartbeat
+                        # ← KHÔNG đổi status, giữ nguyên
+                        switch.heartbeat(timestamp=batch_timestamp)
+                        if s_ports:
+                            switch.update_port_stats(s_ports, timestamp=batch_timestamp)
+                        
+                        logger.debug(f"[BATCH] Switch {s_name} heartbeat (status unchanged: {switch.status})")
             
             for item in data.get('latency', []):
                 pair_id = item.get('pair')
