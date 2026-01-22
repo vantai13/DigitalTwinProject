@@ -79,6 +79,62 @@ def register_socket_events(socketio):
     def handle_disconnect():
         """Xử lý khi client ngắt kết nối"""
         logger.info(f"Client disconnected: {request.sid}")
+    # ========================================
+    # ✅ FIX: THÊM HANDLER CHO SWITCH_UPDATED VÀ HOST_UPDATED
+    # ========================================
+    @socketio.on('switch_updated')
+    def handle_switch_update_explicit(data):
+        """
+        Nhận sự kiện switch_updated trực tiếp từ Mininet (khi toggle)
+        Data format: {'name': 's1', 'status': 'offline', 'dpid': ...}
+        """
+        s_name = data.get('name')
+        s_status = data.get('status')
+        
+        if not s_name:
+            logger.warning("[EVENT] switch_updated missing 'name'")
+            return
+
+        logger.info(f"⚡ [EVENT] Received explicit switch update: {s_name} → {s_status}")
+
+        with data_lock:
+            switch = digital_twin.get_switch(s_name)
+            if switch:
+                # 1. Cập nhật trạng thái trong Digital Twin (Backend Memory)
+                switch.set_status(s_status)
+                
+                # 2. Broadcast ngay lập tức cho Frontend
+                socketio.emit('switch_updated', switch.to_json())
+                logger.info(f"✅ [EVENT] Broadcasted switch_updated: {s_name} → {s_status}")
+            else:
+                logger.warning(f"[EVENT] Switch {s_name} not found in Digital Twin")
+
+    @socketio.on('host_updated')
+    def handle_host_update_explicit(data):
+        """
+        Nhận sự kiện host_updated trực tiếp từ Mininet (khi toggle)
+        Data format: {'name': 'h1', 'status': 'offline', ...}
+        """
+        h_name = data.get('name')
+        h_status = data.get('status')
+        
+        if not h_name:
+            logger.warning("[EVENT] host_updated missing 'name'")
+            return
+
+        logger.info(f"⚡ [EVENT] Received explicit host update: {h_name} → {h_status}")
+
+        with data_lock:
+            host = digital_twin.get_host(h_name)
+            if host:
+                # 1. Cập nhật trạng thái trong Digital Twin
+                host.set_status(h_status)
+                
+                # 2. Broadcast ngay lập tức cho Frontend
+                socketio.emit('host_updated', host.to_json())
+                logger.info(f"✅ [EVENT] Broadcasted host_updated: {h_name} → {h_status}")
+            else:
+                logger.warning(f"[EVENT] Host {h_name} not found in Digital Twin")
 
     @socketio.on('mininet_telemetry')
     def handle_mininet_telemetry(data):
@@ -322,3 +378,5 @@ def register_socket_events(socketio):
             'error': error_message,
             'result': result_data
         })
+
+    
