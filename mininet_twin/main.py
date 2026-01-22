@@ -2,6 +2,7 @@ import time
 import sys
 import threading
 import os
+import psutil 
 
 from mininet.net import Mininet
 from mininet.node import RemoteController, OVSKernelSwitch, CPULimitedHost
@@ -35,6 +36,74 @@ logger = setup_logger()
 # Khởi tạo Clients
 api_client = TopologyApiClient(API_BASE_URL)
 socket_client = SocketClient(SOCKET_URL)
+
+def is_switch_running(sw):
+    """
+    Kiểm tra switch có đang chạy THẬT SỰ không
+    
+    PHƯƠNG PHÁP: Dùng ovs-ofctl để test kết nối trực tiếp
+    - Nếu switch offline → ovs-ofctl báo lỗi ngay
+    - Nếu switch online → Trả về port stats
+    
+    VERSION 3: Fix "unknown bridge" error
+    """
+    try:
+        # ========================================
+        # METHOD: Check ovs-ofctl (CHÍNH XÁC NHẤT)
+        # ========================================
+        # Timeout 0.2s để tránh block nếu switch chết
+        cmd = f'timeout 0.2s ovs-ofctl show {sw.name} 2>&1'
+        result = os.popen(cmd).read()
+        
+        # ========================================
+        # ✅ FIX: THÊM "unknown bridge" và "not found"
+        # ========================================
+        error_keywords = [
+            'cannot connect',
+            'no such device',
+            'timed out',
+            'connection refused',
+            'not exist',
+            'failed to connect',
+            'unable to connect',
+            'unknown bridge',    # ← THÊM VÀO (QUAN TRỌNG!)
+            'not found',         # ← THÊM VÀO
+            'does not exist',    # ← THÊM VÀO (an toàn hơn)
+            'no bridge named'    # ← THÊM VÀO (một số phiên bản OVS)
+        ]
+        
+        # Nếu có bất kỳ error nào → Switch OFFLINE
+        result_lower = result.lower()
+        for keyword in error_keywords:
+            if keyword in result_lower:
+                logger.debug(f"[SWITCH_CHECK] {sw.name} OFFLINE (error: {keyword})")
+                return False
+        
+        # ========================================
+        # KIỂM TRA OUTPUT HỢP LỆ
+        # ========================================
+        # ovs-ofctl show sẽ trả về thông tin DPID, ports nếu switch UP
+        if 'dpid' in result_lower or 'features reply' in result_lower:
+            logger.debug(f"[SWITCH_CHECK] {sw.name} UP (ovs-ofctl responded)")
+            return True
+        
+        # ========================================
+        # ✅ FIX: FALLBACK AN TOÀN HƠN
+        # ========================================
+        # Nếu output lạ (không phải lỗi quen thuộc, nhưng cũng không phải thành công)
+        # → Log ra để debug và MẶC ĐỊNH TRẢ VỀ FALSE (an toàn)
+        if result.strip():
+            logger.warning(f"[SWITCH_CHECK] Unknown output for {sw.name}: {result.strip()[:100]}")
+        else:
+            logger.debug(f"[SWITCH_CHECK] {sw.name} OFFLINE (empty output)")
+        
+        # ✅ QUAN TRỌNG: Mặc định FALSE nếu không xác nhận được UP
+        return False
+    
+    except Exception as e:
+        logger.error(f"[SWITCH_CHECK] Error checking {sw.name}: {e}")
+        # ✅ AN TOÀN: Nếu lỗi → Giả định offline
+        return False
 
 def run_simulation():
     #  Khởi tạo Mininet
@@ -173,15 +242,26 @@ def run_simulation():
             # Switch Metrics (Heartbeat)
             switch_data_collected = switch_stats.collect_switch_port_stats(net)
             
-
-            telemetry_batch["switches"] = [] 
+            # ========================================
+            # ✅ FIX: KIỂM TRA SWITCH CHÍNH XÁC
+            # ========================================
+            telemetry_batch["switches"] = []
             for sw in net.switches:
                 s_name = sw.name
                 s_stats = switch_data_collected.get(s_name, {})
 
-                # ✅ KIỂM TRA SWITCH CÓ ĐANG CHẠY KHÔNG
-                # Switch đang chạy nếu: sw.shell tồn tại và không bị stop()
-                is_running = hasattr(sw, 'shell') and sw.shell is not None
+                # ✅ SỬ DỤNG HÀM KIỂM TRA MỚI
+                is_running = is_switch_running(sw)
+                
+                # ========================================
+                # ✅ DEBUG: LOG CHI TIẾT
+                # ========================================
+                # logger.info(f"[DEBUG] Switch {s_name}: is_running={is_running}, "
+                #            f"has_pid={hasattr(sw, 'pid')}, pid={getattr(sw, 'pid', None)}, "
+                #            f"has_shell={hasattr(sw, 'shell')}, shell={sw.shell if hasattr(sw, 'shell') else None}")
+                
+                # if not is_running:
+                #     logger.info(f"[COLLECTOR] ⚠️ Switch {s_name} detected as OFFLINE")
                 
                 telemetry_batch["switches"].append({
                     "name": s_name,
