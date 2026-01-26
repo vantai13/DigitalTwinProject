@@ -125,6 +125,19 @@ function setupWebSocket() {
         }
       }
     })
+    // ============================================================
+    
+    // Update switches
+    data.switches?.forEach(s => {
+      const node = networkData.value.graph_data.nodes.find(n => n.id === s.name)
+      if (node && node.details) {
+        node.details.status = s.status
+        // Nếu muốn cập nhật thêm ports (optional):
+        if (s.ports) {
+          node.details.ports = s.ports
+        }
+      }
+    })
   })
 
   // Listen for action updates
