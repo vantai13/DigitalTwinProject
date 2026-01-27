@@ -3,7 +3,10 @@ import re
 import time 
 from venv import logger
 
-
+# ========================================
+# ✅ GLOBAL: DICT LƯU TRẠNG THÁI LINK
+# ========================================
+_link_status_cache = {}  # {link_id: 'up'/'down'}
 
 # def collect_link_metrics(net, link_byte_counters, sync_interval):
 #     """
@@ -71,6 +74,8 @@ def collect_link_metrics(net, link_byte_counters, prev_throughput_tracker, sync_
     """
     Thu thập dữ liệu các link với kỹ thuật Moving Average (EMA).
     """
+    global _link_status_cache
+
     link_metrics = {}
     ALPHA = 0.7  # Hệ số tin tưởng vào giá trị mới (70% mới, 30% cũ)
     
@@ -82,9 +87,21 @@ def collect_link_metrics(net, link_byte_counters, prev_throughput_tracker, sync_
         link_id = "-".join(sorted([node1.name, node2.name]))
         
         # ========================================
-        # ✅ THÊM: KIỂM TRA SWITCH CÓ TẮT KHÔNG
+        # ✅ THÊM: KIỂM TRA TRẠNG THÁI TỪ CACHE
         # ========================================
-        switch_is_down = False
+        cached_status = _link_status_cache.get(link_id)
+        
+        if cached_status == 'down':
+            # Link bị tắt thủ công → Force throughput = 0
+            link_metrics[link_id] = 0.0
+            prev_throughput_tracker[link_id] = 0.0
+            
+            # ✅ XÓA COUNTER ĐỂ TRÁNH TĂNG VỌT KHI LINK UP
+            if link_id in link_byte_counters:
+                del link_byte_counters[link_id]
+            
+            logger.debug(f"[LINK_STATS] {link_id} forced to 0 (status=down)")
+            continue
         
         # ========================================
         # ✅ FIX: KIỂM TRA SWITCH NHƯNG KHÔNG ÉP LINK DOWN
@@ -170,6 +187,42 @@ def collect_link_metrics(net, link_byte_counters, prev_throughput_tracker, sync_
         link_metrics[link_id] = round(smoothed_throughput, 2)
 
     return link_metrics
+
+# ========================================
+# ✅ HÀM MỚI: RESET COUNTER KHI LINK UP
+# ========================================
+def reset_link_counter(link_id):
+    """
+    Xóa counter của link để tránh tăng vọt khi link bật lại
+    
+    Args:
+        link_id (str): ID của link (h1-s1)
+    """
+    global link_byte_counters, prev_throughput_tracker
+    
+    if link_id in link_byte_counters:
+        del link_byte_counters[link_id]
+        logger.info(f"[LINK_STATS] Reset byte counter for {link_id}")
+    
+    if link_id in prev_throughput_tracker:
+        del prev_throughput_tracker[link_id]
+        logger.info(f"[LINK_STATS] Reset throughput tracker for {link_id}")
+
+
+# ========================================
+# ✅ HÀM MỚI: CẬP NHẬT TRẠNG THÁI LINK
+# ========================================
+def update_link_status(link_id, status):
+    """
+    Cập nhật trạng thái link từ CommandExecutor
+    
+    Args:
+        link_id (str): ID của link
+        status (str): 'up' hoặc 'down'
+    """
+    global _link_status_cache
+    _link_status_cache[link_id] = status
+    logger.info(f"[LINK_STATS] Link {link_id} status updated: {status}")
 
 def get_switch_interface_bytes(node, interface_name):
     """

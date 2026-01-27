@@ -487,11 +487,31 @@ class CommandExecutor:
                 self.net.configLinkStatus(node1_name, node2_name, 'down')
                 logger.info(f"[EXECUTOR] Link {link_id} set to DOWN")
                 message = f"Link {link_id} disabled successfully"
-            
+                
+                # ========================================
+                # ✅ THÊM: GỬI EVENT NGAY LẬP TỨC
+                # ========================================
+                self._send_link_status_update(link_id, node1_name, node2_name, 'down')
+                
             elif action == 'up':
                 self.net.configLinkStatus(node1_name, node2_name, 'up')
                 logger.info(f"[EXECUTOR] Link {link_id} set to UP")
                 message = f"Link {link_id} enabled successfully"
+                
+                # ========================================
+                # ✅ THÊM: GỬI EVENT NGAY LẬP TỨC
+                # ========================================
+                self._send_link_status_update(link_id, node1_name, node2_name, 'up')
+                
+                # ========================================
+                # ✅ THÊM: RESET COUNTER TRONG COLLECTOR
+                # ========================================
+                try:
+                    from collectors.link_stats import reset_link_counter
+                    reset_link_counter(link_id)
+                    logger.info(f"[EXECUTOR] Reset counter for {link_id}")
+                except Exception as e:
+                    logger.warning(f"[EXECUTOR] Cannot reset counter: {e}")
             
             else:
                 return {
@@ -713,5 +733,47 @@ class CommandExecutor:
             logger.error(f"[EXECUTOR] Import error: {e}")
         except Exception as e:
             logger.error(f"[EXECUTOR] Error sending status update: {e}")
+    # ========================================
+    # ✅ HÀM MỚI: GỬI LINK STATUS UPDATE
+    # ========================================
+    def _send_link_status_update(self, link_id, node1, node2, status):
+        """
+        Gửi link status update trực tiếp về Backend qua SocketIO
+        
+        Args:
+            link_id (str): ID của link (h1-s1)
+            node1 (str): Tên node 1
+            node2 (str): Tên node 2
+            status (str): 'up' hoặc 'down'
+        """
+        try:
+            from services.socket_client import socket_client_instance
+            
+            if not socket_client_instance:
+                logger.warning(f"[EXECUTOR] SocketClient not initialized yet")
+                return
+            
+            if not socket_client_instance.is_connected():
+                logger.warning(f"[EXECUTOR] Socket not connected")
+                return
+            
+            # ✅ TẠO UPDATE DATA
+            update_data = {
+                'id': link_id,
+                'node1': node1,
+                'node2': node2,
+                'status': status,
+                'current_throughput': 0.0 if status == 'down' else None,
+                'utilization': 0.0 if status == 'down' else None
+            }
+            
+            # ✅ GỬI QUA SOCKET
+            socket_client_instance.sio.emit('link_updated', update_data)
+            logger.info(f"[EXECUTOR] ✅ Sent link_updated: {link_id} → {status}")
+        
+        except ImportError as e:
+            logger.error(f"[EXECUTOR] Import error: {e}")
+        except Exception as e:
+            logger.error(f"[EXECUTOR] Error sending link status update: {e}")
 
 

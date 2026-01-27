@@ -378,5 +378,54 @@ def register_socket_events(socketio):
             'error': error_message,
             'result': result_data
         })
+    # ========================================
+    # ✅ THÊM: HANDLER CHO LINK_UPDATED TỪ MININET
+    # ========================================
+    @socketio.on('link_updated')
+    def handle_link_updated_from_mininet(data):
+        """
+        Nhận link status update trực tiếp từ Mininet (khi toggle)
+        Data format: {
+            'id': 'h1-s1',
+            'node1': 'h1',
+            'node2': 's1',
+            'status': 'down',
+            'current_throughput': 0.0,
+            'utilization': 0.0
+        }
+        """
+        link_id = data.get('id')
+        status = data.get('status')
+        
+        if not link_id:
+            logger.warning("[EVENT] link_updated missing 'id'")
+            return
+        
+        logger.info(f"⚡ [EVENT] Link status event from Mininet: {link_id} → {status}")
+        
+        with data_lock:
+            # Tìm link trong Digital Twin
+            parts = link_id.split('-')
+            if len(parts) != 2:
+                logger.warning(f"[EVENT] Invalid link_id: {link_id}")
+                return
+            
+            link = digital_twin.get_link(parts[0], parts[1])
+            
+            if link:
+                # ✅ CẬP NHẬT TRẠNG THÁI NGAY LẬP TỨC
+                link.set_status(status)
+                
+                if status == 'down':
+                    # Force throughput về 0
+                    link.current_throughput = 0.0
+                    link.utilization = 0.0
+                
+                # ✅ BROADCAST NGAY TỚI FRONTEND
+                socketio.emit('link_updated', link.to_json())
+                logger.info(f"✅ [EVENT] Broadcasted link_updated: {link_id} → {status}")
+            else:
+                logger.warning(f"[EVENT] Link {link_id} not found in Digital Twin")
+
 
     

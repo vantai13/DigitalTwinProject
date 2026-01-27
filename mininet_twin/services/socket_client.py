@@ -81,6 +81,40 @@ class SocketClient:
                     'action_id': data.get('action_id'),
                     'error': str(e)
                 })
+        # ========================================
+        # ✅ THÊM: HANDLER CHO LINK STATUS UPDATE
+        # ========================================
+        @self.sio.on('force_link_status')
+        def on_force_link_status(data):
+            """
+            Nhận lệnh force link status từ Backend
+            
+            Data format: {
+                'link_id': 'h1-s1',
+                'status': 'down'
+            }
+            """
+            link_id = data.get('link_id')
+            status = data.get('status')
+            
+            if not link_id or not status:
+                logger.warning("[SOCKET] Missing link_id or status")
+                return
+            
+            logger.info(f"[SOCKET] Force link status: {link_id} → {status}")
+            
+            try:
+                from collectors.link_stats import update_link_status, reset_link_counter
+                
+                # Cập nhật status cache
+                update_link_status(link_id, status)
+                
+                # Nếu link up → Reset counter
+                if status == 'up':
+                    reset_link_counter(link_id)
+            
+            except Exception as e:
+                logger.error(f"[SOCKET] Error forcing link status: {e}")
 
     def connect(self):
         logger.info(f"🔌 Kết nối tới {self.server_url}...")
