@@ -277,22 +277,41 @@ class CommandExecutor:
                     logger.info(f"[EXECUTOR] Disabling switch {device_name}...")
                     
                     # ========================================
-                    # ✅ FIX: BLACKHOLING THAY VÌ STOP
+                    # ✅ GIẢI PHÁP: TC LOSS 100% (TRAFFIC CONTROL)
                     # ========================================
-                    # Xóa tất cả Flow → Switch không biết forward → DROP all packets
                     try:
+                        # BƯỚC 1: Xóa flows (ngăn Controller tự động nạp lại)
                         device.cmd('ovs-ofctl del-flows ' + device_name)
                         logger.info(f"[EXECUTOR] Deleted all flows on {device_name}")
                         
-                        # KHÔNG GỌI device.stop() NỮA
-                        # Switch vẫn chạy nhưng không forward gói tin
+                        # ========================================
+                        # ✅ BƯỚC 2: ÁP DỤNG TC LOSS 100% CHO TẤT CẢ PORTS
+                        # ========================================
+                        for intf in device.intfList():
+                            try:
+                                # Skip loopback
+                                if intf.name == 'lo':
+                                    continue
+                                
+                                # Xóa qdisc cũ (nếu có)
+                                device.cmd(f'tc qdisc del dev {intf.name} root 2>/dev/null')
+                                
+                                # Thêm qdisc netem với loss 100%
+                                device.cmd(f'tc qdisc add dev {intf.name} root netem loss 100%')
+                                
+                                logger.info(f"[EXECUTOR] Applied tc loss 100% on {intf.name}")
+                            
+                            except Exception as e:
+                                logger.warning(f"[EXECUTOR] Error applying tc on {intf.name}: {e}")
+                        
+                        logger.info(f"[EXECUTOR] Switch {device_name} disabled (flows + tc loss 100%)")
                         
                     except Exception as e:
-                        logger.error(f"[EXECUTOR] Error clearing flows: {e}")
-                        # Fallback: Nếu xóa flow lỗi thì mới stop
+                        logger.error(f"[EXECUTOR] Error disabling switch: {e}")
+                        # Fallback: Nếu tc lỗi thì mới stop
                         device.stop()
                     
-                    message = f"Switch {device_name} disabled successfully (blackholed)"
+                    message = f"Switch {device_name} disabled successfully (data plane blocked)"
                     
                     # Gửi status update
                     self._send_device_status_update(device_name, 'offline', is_host=False)
@@ -301,23 +320,43 @@ class CommandExecutor:
                     logger.info(f"[EXECUTOR] Enabling switch {device_name}...")
                     
                     # ========================================
-                    # ✅ FIX: RESTORE FLOWS THAY VÌ START
+                    # ✅ GIẢI PHÁP: XÓA TC LOSS + RESTORE FLOWS
                     # ========================================
                     try:
-                        # Kiểm tra xem switch có đang chạy không
+                        # Kiểm tra switch có chạy không
                         check_cmd = f'ovs-ofctl show {device_name} 2>&1'
                         result = os.popen(check_cmd).read()
                         
                         if 'cannot connect' in result.lower() or 'unknown bridge' in result.lower():
-                            # Switch thực sự bị tắt → Cần start lại
-                            logger.info(f"[EXECUTOR] Switch {device_name} was truly stopped, restarting...")
+                            # Switch thực sự bị tắt → Start lại
+                            logger.info(f"[EXECUTOR] Switch {device_name} was stopped, restarting...")
                             device.start([])
                             time.sleep(0.5)
                         else:
-                            # Switch vẫn chạy (chỉ bị blackhole) → Restore flows
-                            logger.info(f"[EXECUTOR] Switch {device_name} was blackholed, restoring flows...")
+                            # Switch vẫn chạy → Restore
+                            logger.info(f"[EXECUTOR] Switch {device_name} was blocked, restoring...")
                             
-                            # Install default flow: forward all (normal L2 switching)
+                            # ========================================
+                            # ✅ BƯỚC 1: XÓA TC LOSS 100% TRÊN TẤT CẢ PORTS
+                            # ========================================
+                            for intf in device.intfList():
+                                try:
+                                    if intf.name == 'lo':
+                                        continue
+                                    
+                                    # Xóa qdisc netem (loss 100%)
+                                    device.cmd(f'tc qdisc del dev {intf.name} root 2>/dev/null')
+                                    
+                                    logger.info(f"[EXECUTOR] Removed tc loss from {intf.name}")
+                                
+                                except Exception as e:
+                                    logger.warning(f"[EXECUTOR] Error removing tc on {intf.name}: {e}")
+                            
+                            time.sleep(0.3)  # Đợi kernel apply
+                            
+                            # ========================================
+                            # ✅ BƯỚC 2: RESTORE DEFAULT FLOW
+                            # ========================================
                             device.cmd(f'ovs-ofctl add-flow {device_name} action=normal')
                             logger.info(f"[EXECUTOR] Restored default flow on {device_name}")
                         

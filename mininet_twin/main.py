@@ -41,68 +41,69 @@ def is_switch_running(sw):
     """
     Kiểm tra switch có đang chạy THẬT SỰ không
     
-    PHƯƠNG PHÁP: Dùng ovs-ofctl để test kết nối trực tiếp
-    - Nếu switch offline → ovs-ofctl báo lỗi ngay
-    - Nếu switch online → Trả về port stats
-    
-    VERSION 3: Fix "unknown bridge" error
+    ✅ VERSION 4: Kiểm tra TC LOSS 100%
     """
     try:
         # ========================================
-        # METHOD: Check ovs-ofctl (CHÍNH XÁC NHẤT)
+        # BƯỚC 1: Kiểm tra OVS bridge có tồn tại không
         # ========================================
-        # Timeout 0.2s để tránh block nếu switch chết
         cmd = f'timeout 0.2s ovs-ofctl show {sw.name} 2>&1'
         result = os.popen(cmd).read()
         
-        # ========================================
-        # ✅ FIX: THÊM "unknown bridge" và "not found"
-        # ========================================
+        # Nếu bridge không tồn tại → OFFLINE
         error_keywords = [
-            'cannot connect',
-            'no such device',
-            'timed out',
-            'connection refused',
-            'not exist',
-            'failed to connect',
-            'unable to connect',
-            'unknown bridge',    # ← THÊM VÀO (QUAN TRỌNG!)
-            'not found',         # ← THÊM VÀO
-            'does not exist',    # ← THÊM VÀO (an toàn hơn)
-            'no bridge named'    # ← THÊM VÀO (một số phiên bản OVS)
+            'cannot connect', 'unknown bridge', 'not found',
+            'does not exist', 'no bridge named'
         ]
         
-        # Nếu có bất kỳ error nào → Switch OFFLINE
         result_lower = result.lower()
         for keyword in error_keywords:
             if keyword in result_lower:
-                logger.debug(f"[SWITCH_CHECK] {sw.name} OFFLINE (error: {keyword})")
+                logger.debug(f"[SWITCH_CHECK] {sw.name} OFFLINE (bridge error)")
                 return False
         
         # ========================================
-        # KIỂM TRA OUTPUT HỢP LỆ
+        # ✅ BƯỚC 2: KIỂM TRA TC LOSS 100%
         # ========================================
-        # ovs-ofctl show sẽ trả về thông tin DPID, ports nếu switch UP
-        if 'dpid' in result_lower or 'features reply' in result_lower:
-            logger.debug(f"[SWITCH_CHECK] {sw.name} UP (ovs-ofctl responded)")
-            return True
+        # Kiểm tra xem có port nào bị tc loss 100% không
+        for intf in sw.intfList():
+            if intf.name == 'lo':
+                continue
+            
+            try:
+                # Kiểm tra qdisc trên interface
+                tc_cmd = f'tc qdisc show dev {intf.name}'
+                tc_result = os.popen(tc_cmd).read()
+                
+                # Nếu có "netem loss 100%" → Switch bị disabled
+                if 'netem' in tc_result and 'loss 100%' in tc_result:
+                    logger.debug(f"[SWITCH_CHECK] {sw.name} OFFLINE (tc loss 100% detected)")
+                    return False
+            
+            except Exception as e:
+                logger.debug(f"[SWITCH_CHECK] Error checking tc on {intf.name}: {e}")
+                continue
         
         # ========================================
-        # ✅ FIX: FALLBACK AN TOÀN HƠN
+        # ✅ BƯỚC 3: KIỂM TRA FLOWS
         # ========================================
-        # Nếu output lạ (không phải lỗi quen thuộc, nhưng cũng không phải thành công)
-        # → Log ra để debug và MẶC ĐỊNH TRẢ VỀ FALSE (an toàn)
-        if result.strip():
-            logger.warning(f"[SWITCH_CHECK] Unknown output for {sw.name}: {result.strip()[:100]}")
-        else:
-            logger.debug(f"[SWITCH_CHECK] {sw.name} OFFLINE (empty output)")
+        # Nếu không có flows → Có thể đang bị blackhole
+        flows_cmd = f'timeout 0.2s ovs-ofctl dump-flows {sw.name} 2>&1'
+        flows_result = os.popen(flows_cmd).read()
         
-        # ✅ QUAN TRỌNG: Mặc định FALSE nếu không xác nhận được UP
-        return False
+        # Nếu không có flows (trừ default NORMAL flow)
+        if 'cookie=' not in flows_result:
+            logger.debug(f"[SWITCH_CHECK] {sw.name} OFFLINE (no flows)")
+            return False
+        
+        # ========================================
+        # ✅ TẤT CẢ OK → SWITCH UP
+        # ========================================
+        logger.debug(f"[SWITCH_CHECK] {sw.name} UP (all checks passed)")
+        return True
     
     except Exception as e:
         logger.error(f"[SWITCH_CHECK] Error checking {sw.name}: {e}")
-        # ✅ AN TOÀN: Nếu lỗi → Giả định offline
         return False
 
 def run_simulation():
