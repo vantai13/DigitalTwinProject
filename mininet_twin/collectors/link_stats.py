@@ -1,3 +1,4 @@
+import os
 import re
 import time 
 from venv import logger
@@ -80,7 +81,43 @@ def collect_link_metrics(net, link_byte_counters, prev_throughput_tracker, sync_
         # ID duy nhất
         link_id = "-".join(sorted([node1.name, node2.name]))
         
-        # ... (Phần xác định target_node giữ nguyên như code cũ) ...
+        # ========================================
+        # ✅ THÊM: KIỂM TRA SWITCH CÓ TẮT KHÔNG
+        # ========================================
+        switch_is_down = False
+        
+        # Check node1 nếu là switch
+        if node1.name.startswith('s'):
+            try:
+                # Dùng hàm is_switch_running từ main.py
+                # (Bạn cần import hoặc copy hàm này)
+                cmd = f'timeout 0.2s ovs-ofctl show {node1.name} 2>&1'
+                result = os.popen(cmd).read().lower()
+                error_keywords = ['cannot connect', 'unknown bridge', 'not found']
+                if any(keyword in result for keyword in error_keywords):
+                    switch_is_down = True
+            except:
+                pass
+        
+        # Check node2 nếu là switch
+        if node2.name.startswith('s'):
+            try:
+                cmd = f'timeout 0.2s ovs-ofctl show {node2.name} 2>&1'
+                result = os.popen(cmd).read().lower()
+                error_keywords = ['cannot connect', 'unknown bridge', 'not found']
+                if any(keyword in result for keyword in error_keywords):
+                    switch_is_down = True
+            except:
+                pass
+        
+        # ========================================
+        # NẾU SWITCH TẮT → THROUGHPUT = 0 NHƯNG VẪN GỬI
+        # ========================================
+        if switch_is_down:
+            link_metrics[link_id] = 0.0
+            prev_throughput_tracker[link_id] = 0.0
+            continue
+        
         target_node = None
         target_intf = None
         if 'h' in node1.name: 
