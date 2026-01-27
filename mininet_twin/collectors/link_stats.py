@@ -86,37 +86,42 @@ def collect_link_metrics(net, link_byte_counters, prev_throughput_tracker, sync_
         # ========================================
         switch_is_down = False
         
-        # Check node1 nếu là switch
+        # ========================================
+        # ✅ FIX: KIỂM TRA SWITCH NHƯNG KHÔNG ÉP LINK DOWN
+        # ========================================
+        switch_has_no_flows = False
+
+        # Check xem switch có flows không
         if node1.name.startswith('s'):
             try:
-                # Dùng hàm is_switch_running từ main.py
-                # (Bạn cần import hoặc copy hàm này)
-                cmd = f'timeout 0.2s ovs-ofctl show {node1.name} 2>&1'
+                cmd = f'timeout 0.2s ovs-ofctl dump-flows {node1.name} 2>&1'
                 result = os.popen(cmd).read().lower()
-                error_keywords = ['cannot connect', 'unknown bridge', 'not found']
-                if any(keyword in result for keyword in error_keywords):
-                    switch_is_down = True
+                
+                # Nếu không có flows (blackholed) HOẶC switch offline
+                if 'cookie=' not in result or 'cannot connect' in result:
+                    switch_has_no_flows = True
+                    logger.debug(f"[LINK_STATS] {node1.name} has no flows or offline")
             except:
                 pass
-        
-        # Check node2 nếu là switch
+
+        # Check node2 tương tự
         if node2.name.startswith('s'):
             try:
-                cmd = f'timeout 0.2s ovs-ofctl show {node2.name} 2>&1'
+                cmd = f'timeout 0.2s ovs-ofctl dump-flows {node2.name} 2>&1'
                 result = os.popen(cmd).read().lower()
-                error_keywords = ['cannot connect', 'unknown bridge', 'not found']
-                if any(keyword in result for keyword in error_keywords):
-                    switch_is_down = True
+                if 'cookie=' not in result or 'cannot connect' in result:
+                    switch_has_no_flows = True
+                    logger.debug(f"[LINK_STATS] {node2.name} has no flows or offline")
             except:
                 pass
         
-        # ========================================
-        # NẾU SWITCH TẮT → THROUGHPUT = 0 NHƯNG VẪN GỬI
-        # ========================================
-        if switch_is_down:
-            link_metrics[link_id] = 0.0
-            prev_throughput_tracker[link_id] = 0.0
-            continue
+        # # ========================================
+        # # NẾU SWITCH TẮT → THROUGHPUT = 0 NHƯNG VẪN GỬI
+        # # ========================================
+        # if switch_is_down:
+        #     link_metrics[link_id] = 0.0
+        #     prev_throughput_tracker[link_id] = 0.0
+        #     continue
         
         target_node = None
         target_intf = None

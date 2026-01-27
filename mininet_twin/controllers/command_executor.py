@@ -25,6 +25,7 @@ ARCHITECTURE:
     Return result
 """
 
+import os
 import time
 import re
 from utils.logger import setup_logger
@@ -271,56 +272,62 @@ class CommandExecutor:
                     }
             
             elif is_switch:
-                # ========================================
                 # SWITCH TOGGLE
-                # ========================================
                 if action == 'disable':
                     logger.info(f"[EXECUTOR] Disabling switch {device_name}...")
                     
-                    # # Pre-cleanup
-                    # try:
-                    #     connected_hosts = []
-                    #     for link in self.net.links:
-                    #         if link.intf1.node == device or link.intf2.node == device:
-                    #             other_node = link.intf1.node if link.intf2.node == device else link.intf2.node
-                    #             if other_node.name.startswith('h'):
-                    #                 connected_hosts.append(other_node)
-                        
-                    #     logger.info(f"[EXECUTOR] Found {len(connected_hosts)} hosts connected")
-                        
-                    #     for h in connected_hosts:
-                    #         try:
-                    #             if hasattr(h, 'lock'):
-                    #                 with h.lock:
-                    #                     h.cmd('timeout 1s killall -9 iperf 2>/dev/null || true')
-                    #                     time.sleep(0.1)
-                    #             else:
-                    #                 h.cmd('timeout 1s killall -9 iperf 2>/dev/null || true')
-                    #                 time.sleep(0.1)
-                    #         except Exception as e:
-                    #             logger.warning(f"[EXECUTOR] Error: {e}")
-                        
-                    #     time.sleep(0.5)
-                    
-                    # except Exception as e:
-                    #     logger.error(f"[EXECUTOR] Pre-cleanup error: {e}")
-                    
-                    # Stop switch
-                    device.stop()
-                    logger.info(f"[EXECUTOR] Switch {device_name} stopped")
-                    message = f"Switch {device_name} disabled successfully"
-                    
                     # ========================================
-                    # ✅ FIX 2: GỬI STATUS UPDATE CHO SWITCH
+                    # ✅ FIX: BLACKHOLING THAY VÌ STOP
                     # ========================================
+                    # Xóa tất cả Flow → Switch không biết forward → DROP all packets
+                    try:
+                        device.cmd('ovs-ofctl del-flows ' + device_name)
+                        logger.info(f"[EXECUTOR] Deleted all flows on {device_name}")
+                        
+                        # KHÔNG GỌI device.stop() NỮA
+                        # Switch vẫn chạy nhưng không forward gói tin
+                        
+                    except Exception as e:
+                        logger.error(f"[EXECUTOR] Error clearing flows: {e}")
+                        # Fallback: Nếu xóa flow lỗi thì mới stop
+                        device.stop()
+                    
+                    message = f"Switch {device_name} disabled successfully (blackholed)"
+                    
+                    # Gửi status update
                     self._send_device_status_update(device_name, 'offline', is_host=False)
                 
                 elif action == 'enable':
                     logger.info(f"[EXECUTOR] Enabling switch {device_name}...")
                     
-                    # Start switch
-                    device.start([])
-                    time.sleep(0.5)
+                    # ========================================
+                    # ✅ FIX: RESTORE FLOWS THAY VÌ START
+                    # ========================================
+                    try:
+                        # Kiểm tra xem switch có đang chạy không
+                        check_cmd = f'ovs-ofctl show {device_name} 2>&1'
+                        result = os.popen(check_cmd).read()
+                        
+                        if 'cannot connect' in result.lower() or 'unknown bridge' in result.lower():
+                            # Switch thực sự bị tắt → Cần start lại
+                            logger.info(f"[EXECUTOR] Switch {device_name} was truly stopped, restarting...")
+                            device.start([])
+                            time.sleep(0.5)
+                        else:
+                            # Switch vẫn chạy (chỉ bị blackhole) → Restore flows
+                            logger.info(f"[EXECUTOR] Switch {device_name} was blackholed, restoring flows...")
+                            
+                            # Install default flow: forward all (normal L2 switching)
+                            device.cmd(f'ovs-ofctl add-flow {device_name} action=normal')
+                            logger.info(f"[EXECUTOR] Restored default flow on {device_name}")
+                        
+                        time.sleep(0.3)
+                        
+                    except Exception as e:
+                        logger.error(f"[EXECUTOR] Error enabling switch: {e}")
+                        # Fallback
+                        device.start([])
+                        time.sleep(0.5)
                     
                     # Recovery
                     connected_hosts = []

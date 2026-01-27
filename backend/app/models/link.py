@@ -39,32 +39,34 @@ class Link:
 
         
     def update_performance_metrics(self, throughput, latency=0.0, jitter=0.0, timestamp = None):
-        """
-        Cập nhật các số liệu hiệu năng (dữ liệu từ iPerf!).
-        """
         if timestamp: 
             self.last_update_time = datetime.fromtimestamp(timestamp)
         else: 
             self.last_update_time = datetime.now()
 
-        if throughput <= self.THROUGHPUT_DOWN_THRESHOLD:
-            # Throughput quá thấp → Coi như link DOWN ngay lập tức
-            self.current_throughput = 0.0  # Force về 0 để rõ ràng
-            self.utilization = 0.0
-            self.set_status('down')
-            return  # ← Thoát sớm, không tính toán tiếp
-
+        # ========================================
+        # ✅ FIX: THROUGHPUT = 0 KHÔNG ĐỒNG NGHĨA VỚI DOWN
+        # ========================================
         self.current_throughput = throughput
         self.latency = latency
         self.jitter = jitter
         self.utilization = self.get_utilization()
 
+        # LOGIC MỚI: Chỉ update status dựa trên utilization
+        # KHÔNG coi throughput = 0 là DOWN nữa
         if self.utilization >= self.THRESHOLD_CRITICAL:
             self.set_status('high-load')
         elif self.utilization >= self.THRESHOLD_WARNING:
             self.set_status('warning')
-        else:
+        elif self.current_throughput > 0:
+            # Có throughput → UP
             self.set_status('up')
+        else:
+            # Throughput = 0 NHƯNG vẫn giữ status cũ
+            # (Có thể là 'up' nếu trước đó đang up)
+            # Chỉ khi TIMEOUT mới chuyển sang 'down'
+            # → Logic này sẽ do monitor_service xử lý
+            pass
 
     def get_utilization(self):
         """
