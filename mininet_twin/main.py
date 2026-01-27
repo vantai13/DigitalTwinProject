@@ -190,53 +190,54 @@ def run_simulation():
                 "latency": []
             }
 
-            
             # Host Metrics
             for h in net.hosts:
-
-                # Kiểm tra xem interface có UP không
-                intf_name = h.defaultIntf().name  # Thường là h1-eth0
+                # ========================================
+                # ✅ FIX: CHỈ CHECK HOST BỊ TẮT THỦ CÔNG
+                # KHÔNG CARE CARRIER (Switch tắt không ảnh hưởng host status)
+                # ========================================
+                
+                intf_name = h.defaultIntf().name
+                
                 try:
+                    # Chỉ check interface có bị DOWN THỦ CÔNG không
+                    # (do lệnh ifconfig down từ toggle_device)
                     if hasattr(h, 'lock'):
                         with h.lock:
-                            # Chạy lệnh ip link show để kiểm tra status
                             intf_status = h.cmd(f'ip link show {intf_name}')
                     else:
                         intf_status = h.cmd(f'ip link show {intf_name}')
                     
-                    # Kiểm tra xem interface có UP không
-                    is_up = 'state UP' in intf_status
+                    # ========================================
+                    # ✅ LOGIC MỚI: CHỈ OFFLINE KHI INTERFACE DOWN
+                    # KHÔNG QUAN TÂM CARRIER (NO-CARRIER khi switch tắt là BÌnh THƯỜNG)
+                    # ========================================
+                    is_interface_down = 'state DOWN' in intf_status  # ← CHỈ CHECK DOWN, không check UP
                     
-                    if not is_up:
-                        # Interface DOWN → Không thu thập metrics, gửi status offline
+                    if is_interface_down:
+                        # Interface bị DOWN thủ công (toggle_device disable)
                         telemetry_batch["hosts"].append({
                             "name": h.name,
-                            "cpu": 0.0,      # Force về 0
-                            "mem": 0.0,      # Force về 0
-                            "status": "offline"  # ← QUAN TRỌNG: Gửi status rõ ràng
+                            "cpu": 0.0,
+                            "mem": 0.0,
+                            "status": "offline"
                         })
-                        logger.debug(f"[COLLECTOR] Host {h.name} interface DOWN, skip metrics")
-                        continue  # Bỏ qua host này, chuyển sang host tiếp theo
+                        logger.debug(f"[COLLECTOR] Host {h.name} interface DOWN manually")
+                        continue
                 
                 except Exception as e:
-                    logger.warning(f"[COLLECTOR] Error checking {h.name} status: {e}")
-                    # Nếu lỗi → Coi như offline
-                    telemetry_batch["hosts"].append({
-                        "name": h.name,
-                        "cpu": 0.0,
-                        "mem": 0.0,
-                        "status": "offline"
-                    })
-                    continue
-
+                    logger.warning(f"[COLLECTOR] Error checking {h.name}: {e}")
+                    # Nếu lỗi kiểm tra → Coi như UP và thu thập metrics
+                    pass
+                
                 # ========================================
-                # CHỈ THU THẬP METRICS NẾU INTERFACE UP
+                # THU THẬP METRICS (Host đang UP)
                 # ========================================
-
                 telemetry_batch["hosts"].append({
                     "name": h.name,
                     "cpu": host_stats.get_host_cpu_usage(h),
                     "mem": host_stats.get_host_memory_usage(h)
+                    # ← KHÔNG GỬI STATUS, để Backend giữ nguyên status hiện tại
                 })
 
             # Switch Metrics (Heartbeat)
