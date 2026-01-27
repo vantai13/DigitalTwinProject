@@ -195,17 +195,17 @@ class CommandExecutor:
                 if action == 'disable':
                     logger.info(f"[EXECUTOR] Disabling {device_name}...")
                     
-                    # Kill iPerf
-                    try:
-                        if hasattr(device, 'lock'):
-                            with device.lock:
-                                device.cmd('killall -9 iperf 2>/dev/null')
-                                time.sleep(0.2)
-                        else:
-                            device.cmd('killall -9 iperf 2>/dev/null')
-                            time.sleep(0.2)
-                    except Exception as e:
-                        logger.warning(f"[EXECUTOR] Error killing iperf: {e}")
+                    # # Kill iPerf
+                    # try:
+                    #     if hasattr(device, 'lock'):
+                    #         with device.lock:
+                    #             device.cmd('killall -9 iperf 2>/dev/null')
+                    #             time.sleep(0.2)
+                    #     else:
+                    #         device.cmd('killall -9 iperf 2>/dev/null')
+                    #         time.sleep(0.2)
+                    # except Exception as e:
+                    #     logger.warning(f"[EXECUTOR] Error killing iperf: {e}")
                     
                     # Down interfaces
                     for intf in interfaces:
@@ -277,33 +277,33 @@ class CommandExecutor:
                 if action == 'disable':
                     logger.info(f"[EXECUTOR] Disabling switch {device_name}...")
                     
-                    # Pre-cleanup
-                    try:
-                        connected_hosts = []
-                        for link in self.net.links:
-                            if link.intf1.node == device or link.intf2.node == device:
-                                other_node = link.intf1.node if link.intf2.node == device else link.intf2.node
-                                if other_node.name.startswith('h'):
-                                    connected_hosts.append(other_node)
+                    # # Pre-cleanup
+                    # try:
+                    #     connected_hosts = []
+                    #     for link in self.net.links:
+                    #         if link.intf1.node == device or link.intf2.node == device:
+                    #             other_node = link.intf1.node if link.intf2.node == device else link.intf2.node
+                    #             if other_node.name.startswith('h'):
+                    #                 connected_hosts.append(other_node)
                         
-                        logger.info(f"[EXECUTOR] Found {len(connected_hosts)} hosts connected")
+                    #     logger.info(f"[EXECUTOR] Found {len(connected_hosts)} hosts connected")
                         
-                        for h in connected_hosts:
-                            try:
-                                if hasattr(h, 'lock'):
-                                    with h.lock:
-                                        h.cmd('timeout 1s killall -9 iperf 2>/dev/null || true')
-                                        time.sleep(0.1)
-                                else:
-                                    h.cmd('timeout 1s killall -9 iperf 2>/dev/null || true')
-                                    time.sleep(0.1)
-                            except Exception as e:
-                                logger.warning(f"[EXECUTOR] Error: {e}")
+                    #     for h in connected_hosts:
+                    #         try:
+                    #             if hasattr(h, 'lock'):
+                    #                 with h.lock:
+                    #                     h.cmd('timeout 1s killall -9 iperf 2>/dev/null || true')
+                    #                     time.sleep(0.1)
+                    #             else:
+                    #                 h.cmd('timeout 1s killall -9 iperf 2>/dev/null || true')
+                    #                 time.sleep(0.1)
+                    #         except Exception as e:
+                    #             logger.warning(f"[EXECUTOR] Error: {e}")
                         
-                        time.sleep(0.5)
+                    #     time.sleep(0.5)
                     
-                    except Exception as e:
-                        logger.error(f"[EXECUTOR] Pre-cleanup error: {e}")
+                    # except Exception as e:
+                    #     logger.error(f"[EXECUTOR] Pre-cleanup error: {e}")
                     
                     # Stop switch
                     device.stop()
