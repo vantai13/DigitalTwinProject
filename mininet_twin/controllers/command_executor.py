@@ -486,6 +486,16 @@ class CommandExecutor:
             if action == 'down':
                 self.net.configLinkStatus(node1_name, node2_name, 'down')
                 logger.info(f"[EXECUTOR] Link {link_id} set to DOWN")
+                # ========================================
+                # ✅ THÊM: CẬP NHẬT STATUS CACHE
+                # ========================================
+                try:
+                    from collectors.link_stats import update_link_status
+                    update_link_status(link_id, 'down')
+                    logger.info(f"[EXECUTOR] Updated link_stats cache: {link_id} → down")
+                except Exception as e:
+                    logger.warning(f"[EXECUTOR] Cannot update cache: {e}")
+                
                 message = f"Link {link_id} disabled successfully"
                 
                 # ========================================
@@ -496,6 +506,17 @@ class CommandExecutor:
             elif action == 'up':
                 self.net.configLinkStatus(node1_name, node2_name, 'up')
                 logger.info(f"[EXECUTOR] Link {link_id} set to UP")
+                # ========================================
+                # ✅ THÊM: CẬP NHẬT STATUS CACHE
+                # ========================================
+                try:
+                    from collectors.link_stats import update_link_status, reset_link_counter
+                    update_link_status(link_id, 'up')
+                    reset_link_counter(link_id)
+                    logger.info(f"[EXECUTOR] Updated link_stats cache: {link_id} → up (counter reset)")
+                except Exception as e:
+                    logger.warning(f"[EXECUTOR] Cannot update cache: {e}")
+                
                 message = f"Link {link_id} enabled successfully"
                 
                 # ========================================

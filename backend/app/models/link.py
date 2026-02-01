@@ -45,28 +45,27 @@ class Link:
             self.last_update_time = datetime.now()
 
         # ========================================
-        # ✅ FIX: THROUGHPUT = 0 KHÔNG ĐỒNG NGHĨA VỚI DOWN
+        # ✅ FIX: THROUGHPUT = 0 VÀ STATUS
         # ========================================
         self.current_throughput = throughput
         self.latency = latency
         self.jitter = jitter
         self.utilization = self.get_utilization()
 
-        # LOGIC MỚI: Chỉ update status dựa trên utilization
-        # KHÔNG coi throughput = 0 là DOWN nữa
+        # ========================================
+        # ✅ LOGIC MỚI: CHỈ UPDATE STATUS DỰA TRÊN UTILIZATION
+        # KHÔNG CÒN COI throughput=0 LÀ DOWN
+        # ========================================
         if self.utilization >= self.THRESHOLD_CRITICAL:
             self.set_status('high-load')
         elif self.utilization >= self.THRESHOLD_WARNING:
             self.set_status('warning')
         elif self.current_throughput > 0:
             # Có throughput → UP
-            self.set_status('up')
-        else:
-            # Throughput = 0 NHƯNG vẫn giữ status cũ
-            # (Có thể là 'up' nếu trước đó đang up)
-            # Chỉ khi TIMEOUT mới chuyển sang 'down'
-            # → Logic này sẽ do monitor_service xử lý
-            pass
+            if self.status in ['down', 'unknown']:
+                self.set_status('up')
+        # ← KHÔNG CÒN ELSE: throughput=0 không tự động DOWN
+        # Chỉ monitor_service mới set DOWN khi timeout
 
     def get_utilization(self):
         """

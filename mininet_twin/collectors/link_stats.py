@@ -72,12 +72,17 @@ _link_status_cache = {}  # {link_id: 'up'/'down'}
 
 def collect_link_metrics(net, link_byte_counters, prev_throughput_tracker, sync_interval):
     """
-    Thu thập dữ liệu các link với kỹ thuật Moving Average (EMA).
+    Thu thập dữ liệu các link với Fast Cut-off khi DOWN
+    
+    ✅ CHIẾN THUẬT:
+    - Nếu link DOWN (status cache) → throughput = 0 ngay lập tức
+    - Nếu link UP nhưng throughput = 0 → Áp dụng EMA
+    - Reset counter khi link DOWN để tránh spike khi UP lại
     """
     global _link_status_cache
 
     link_metrics = {}
-    ALPHA = 0.7  # Hệ số tin tưởng vào giá trị mới (70% mới, 30% cũ)
+    ALPHA = 0.7  # Hệ số EMA
     
     for link in net.links:
         node1 = link.intf1.node
@@ -87,59 +92,25 @@ def collect_link_metrics(net, link_byte_counters, prev_throughput_tracker, sync_
         link_id = "-".join(sorted([node1.name, node2.name]))
         
         # ========================================
-        # ✅ THÊM: KIỂM TRA TRẠNG THÁI TỪ CACHE
+        # ✅ BƯỚC 1: KIỂM TRA STATUS CACHE TRƯỚC
         # ========================================
         cached_status = _link_status_cache.get(link_id)
         
         if cached_status == 'down':
-            # Link bị tắt thủ công → Force throughput = 0
+            # ✅ FAST CUT-OFF: Link bị tắt → Force = 0 ngay
             link_metrics[link_id] = 0.0
             prev_throughput_tracker[link_id] = 0.0
             
-            # ✅ XÓA COUNTER ĐỂ TRÁNH TĂNG VỌT KHI LINK UP
+            # ✅ XÓA COUNTER để tránh SPIKE khi UP
             if link_id in link_byte_counters:
                 del link_byte_counters[link_id]
             
-            logger.debug(f"[LINK_STATS] {link_id} forced to 0 (status=down)")
+            logger.debug(f"[LINK_STATS] {link_id} FAST CUT-OFF (status=down)")
             continue
         
         # ========================================
-        # ✅ FIX: KIỂM TRA SWITCH NHƯNG KHÔNG ÉP LINK DOWN
+        # ✅ BƯỚC 2: THU THẬP BYTES
         # ========================================
-        switch_has_no_flows = False
-
-        # Check xem switch có flows không
-        if node1.name.startswith('s'):
-            try:
-                cmd = f'timeout 0.2s ovs-ofctl dump-flows {node1.name} 2>&1'
-                result = os.popen(cmd).read().lower()
-                
-                # Nếu không có flows (blackholed) HOẶC switch offline
-                if 'cookie=' not in result or 'cannot connect' in result:
-                    switch_has_no_flows = True
-                    logger.debug(f"[LINK_STATS] {node1.name} has no flows or offline")
-            except:
-                pass
-
-        # Check node2 tương tự
-        if node2.name.startswith('s'):
-            try:
-                cmd = f'timeout 0.2s ovs-ofctl dump-flows {node2.name} 2>&1'
-                result = os.popen(cmd).read().lower()
-                if 'cookie=' not in result or 'cannot connect' in result:
-                    switch_has_no_flows = True
-                    logger.debug(f"[LINK_STATS] {node2.name} has no flows or offline")
-            except:
-                pass
-        
-        # # ========================================
-        # # NẾU SWITCH TẮT → THROUGHPUT = 0 NHƯNG VẪN GỬI
-        # # ========================================
-        # if switch_is_down:
-        #     link_metrics[link_id] = 0.0
-        #     prev_throughput_tracker[link_id] = 0.0
-        #     continue
-        
         target_node = None
         target_intf = None
         if 'h' in node1.name: 
@@ -151,12 +122,11 @@ def collect_link_metrics(net, link_byte_counters, prev_throughput_tracker, sync_
 
         if not target_node: continue
 
-        # Lấy bytes hiện tại (có timeout như đã bàn ở phần trước)
-        # rx, tx = get_switch_interface_bytes... (Code cũ)
-        # Giả sử bạn đã áp dụng timeout ở bước trước, nếu chưa thì dùng code cũ
         rx, tx = get_switch_interface_bytes(target_node, target_intf)
         
-        # Tính toán Raw Throughput
+        # ========================================
+        # ✅ BƯỚC 3: TÍNH THROUGHPUT RAW
+        # ========================================
         current_throughput = 0.0
         
         if link_id in link_byte_counters:
@@ -165,25 +135,28 @@ def collect_link_metrics(net, link_byte_counters, prev_throughput_tracker, sync_
             delta_tx = max(0, tx - prev_tx)
             delta_bytes = delta_rx + delta_tx
             
-            if sync_interval > 0.001: # Tránh chia cho 0
+            if sync_interval > 0.001:
                 current_throughput = (delta_bytes * 8) / (sync_interval * 1_000_000)
         
         # Cập nhật counter bytes
         link_byte_counters[link_id] = (rx, tx)
 
-        # --- [LOGIC MỚI] ÁP DỤNG MOVING AVERAGE ---
-        if link_id in prev_throughput_tracker:
-            old_throughput = prev_throughput_tracker[link_id]
-            # Công thức EMA
-            smoothed_throughput = (current_throughput * ALPHA) + (old_throughput * (1 - ALPHA))
+        # ========================================
+        # ✅ BƯỚC 4: ÁP DỤNG EMA (CHỈ KHI LINK UP)
+        # ========================================
+        if current_throughput == 0:
+            # Throughput = 0 THẬT (không phải do DOWN)
+            # → Vẫn áp dụng EMA để giảm dần
+            smoothed_throughput = 0.0
         else:
-            # Lần đầu tiên thì không có số cũ
-            smoothed_throughput = current_throughput
-            
-        # Lưu lại để dùng cho vòng lặp sau
-        prev_throughput_tracker[link_id] = smoothed_throughput
+            # Có traffic → EMA bình thường
+            if link_id in prev_throughput_tracker:
+                old_val = prev_throughput_tracker[link_id]
+                smoothed_throughput = (current_throughput * ALPHA) + (old_val * (1 - ALPHA))
+            else:
+                smoothed_throughput = current_throughput
         
-        # Làm tròn 2 số thập phân
+        prev_throughput_tracker[link_id] = smoothed_throughput
         link_metrics[link_id] = round(smoothed_throughput, 2)
 
     return link_metrics
