@@ -30,37 +30,37 @@ function processEdges(edges) {
     let isDashed = false
     let shadowConfig = { enabled: false }
     
-    // ========================================
-    // ✅ QUAN TRỌNG: ƯU TIÊN STATUS TRƯỚC
-    // ========================================
     const status = edge.status || edge.details?.status || 'unknown'
     const utilization = edge.utilization || 0
     
-    // Lấy throughput từ label hoặc details
+    // ✅ FIX 1: LẤY THROUGHPUT TRỰC TIẾP TỪ edge.label HOẶC edge.details
+    // Nếu edge.label đã có dạng "45.2 Mbps", parse nó ra
     let throughput = 0
+    
     if (edge.label && typeof edge.label === 'string') {
       const match = edge.label.match(/(\d+\.?\d*)\s*Mbps/)
-      if (match) throughput = parseFloat(match[1])
+      if (match) {
+        throughput = parseFloat(match[1])
+      }
     }
+    
+    // Nếu không có label hoặc parse thất bại, lấy từ details
     if (throughput === 0 && edge.details) {
       throughput = edge.details.current_throughput || 0
     }
 
-    // ========================================
-    // ✅ LOGIC HIỂN THỊ: STATUS > THROUGHPUT
-    // ========================================
-    if (status === 'down' || status === 'offline') {
-      // Link DOWN → Hiển thị DOWN ngay (bỏ qua throughput)
+    // === LOGIC HIỂN THỊ ===
+    if (status === 'down' || status === 'offline' || throughput <= 0.1) {
       colorVal = '#475569'
       isDashed = true
       widthVal = 1.5
-      edge.label = 'DOWN'
+      edge.label = 'DOWN'  // ← Force DOWN
     }
     else if (status === 'high-load') {
       colorVal = '#F60000'
       widthVal = 4
       shadowConfig = { enabled: true, color: 'rgba(246, 0, 0, 0.8)', size: 25 }
-      edge.label = `${throughput.toFixed(1)} Mbps`
+      edge.label = `${throughput.toFixed(1)} Mbps`  // ← Hiển thị số
     }
     else if (status === 'warning') {
       colorVal = '#f97316'
@@ -69,24 +69,19 @@ function processEdges(edges) {
       edge.label = `${throughput.toFixed(1)} Mbps`
     }
     else {
-      // Status UP → Hiển thị throughput
-      if (throughput <= 0.1) {
-        // Throughput = 0 NHƯNG status vẫn UP
-        // → Có thể đang idle, không hiển thị DOWN
-        edge.label = '0.0 Mbps'
-      } else {
-        edge.label = `${throughput.toFixed(1)} Mbps`
-        if (utilization > 0) {
-          shadowConfig = { enabled: true, color: 'rgba(0, 247, 247, 0.5)', size: 15 }
-        }
+      if (utilization > 0) {
+        shadowConfig = { enabled: true, color: 'rgba(0, 247, 247, 0.5)', size: 15 }
       }
+      edge.label = `${throughput.toFixed(1)} Mbps`
     }
+
+    let arrowsConfig = { to: { enabled: false } }
 
     return {
       ...edge,
       color: { color: colorVal, highlight: colorVal, hover: colorVal },
       width: widthVal,
-      arrows: { to: { enabled: false } },
+      arrows: arrowsConfig,
       dashes: isDashed,
       shadow: shadowConfig,
       smooth: { type: 'continuous', roundness: 0.5 },
